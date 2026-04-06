@@ -6,6 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
+import CatanBoard3D from './CatanBoard3D';
 import { 
   Dice1, Dice2, Dice3, Dice4, Dice5, Dice6,
   Home, Building2, Route, ScrollText,
@@ -97,19 +98,50 @@ function HexBoard({ gameState, onHexClick, onVertexClick, onEdgeClick }: HexBoar
     return points.join(' ');
   };
 
-  const terrainColors: Record<string, string> = {
-    forest: '#228B22',
-    hills: '#CD853F',
-    pasture: '#90EE90',
-    fields: '#FFD700',
-    mountains: '#808080',
-    desert: '#F4A460',
+  const terrainColors: Record<string, [string, string]> = {
+    forest: ['#1B5E20', '#2E7D32'],
+    hills: ['#A0522D', '#CD853F'],
+    pasture: ['#558B2F', '#7CB342'],
+    fields: ['#F9A825', '#FDD835'],
+    mountains: ['#546E7A', '#78909C'],
+    desert: ['#D4A056', '#E8C878'],
+  };
+
+  // Probability dots for number tokens
+  const getProbDots = (n: number): number => {
+    const dots: Record<number, number> = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 };
+    return dots[n] || 0;
   };
 
   return (
     <svg viewBox="0 0 600 500" className="w-full h-full">
-      {/* Ocean background */}
-      <rect width="600" height="500" fill="#1E90FF" />
+      <defs>
+        {/* Ocean gradient */}
+        <radialGradient id="ocean-grad" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stopColor="#1565C0" />
+          <stop offset="100%" stopColor="#0D47A1" />
+        </radialGradient>
+        {/* Terrain gradients */}
+        {Object.entries(terrainColors).map(([terrain, [c1, c2]]) => (
+          <radialGradient key={terrain} id={`terrain-${terrain}`} cx="40%" cy="35%" r="70%">
+            <stop offset="0%" stopColor={c2} />
+            <stop offset="100%" stopColor={c1} />
+          </radialGradient>
+        ))}
+        {/* Number token glow */}
+        <filter id="token-shadow">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.4" />
+        </filter>
+        {/* Hex border glow */}
+        <filter id="hex-glow">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#000" floodOpacity="0.3" />
+        </filter>
+      </defs>
+
+      {/* Ocean background with gradient */}
+      <rect width="600" height="500" fill="url(#ocean-grad)" />
+      {/* Wave pattern overlay */}
+      <rect width="600" height="500" fill="url(#ocean-grad)" opacity="0.8" rx="20" />
       
       {/* Hex tiles */}
       {gameState.hexTiles.map(hex => {
@@ -118,44 +150,66 @@ function HexBoard({ gameState, onHexClick, onVertexClick, onEdgeClick }: HexBoar
         
         return (
           <g key={hex.id} onClick={() => onHexClick?.(hex.id)} className="cursor-pointer">
+            {/* Hex tile with gradient fill */}
             <polygon
               points={points}
-              fill={terrainColors[hex.terrain]}
-              stroke="#8B4513"
-              strokeWidth="3"
+              fill={`url(#terrain-${hex.terrain})`}
+              stroke="#5D4037"
+              strokeWidth="2.5"
+              filter="url(#hex-glow)"
             />
-            {/* Number token */}
+            {/* Terrain decoration — inner highlight */}
+            <polygon
+              points={getHexPoints(center.x, center.y - 1).split(' ').map((p, i) => {
+                const [px, py] = p.split(',').map(Number);
+                const dx = px - center.x;
+                const dy = py - center.y;
+                return `${center.x + dx * 0.92},${center.y + dy * 0.92}`;
+              }).join(' ')}
+              fill="none"
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
+            />
+            {/* Number token with shadow */}
             {hex.number && (
               <>
                 <circle
                   cx={center.x}
                   cy={center.y}
-                  r="18"
+                  r="17"
                   fill="#FFF8DC"
-                  stroke="#8B4513"
-                  strokeWidth="2"
+                  stroke={hex.number === 6 || hex.number === 8 ? '#C62828' : '#5D4037'}
+                  strokeWidth={hex.number === 6 || hex.number === 8 ? 2.5 : 1.5}
+                  filter="url(#token-shadow)"
                 />
                 <text
                   x={center.x}
-                  y={center.y + 6}
+                  y={center.y + 5}
                   textAnchor="middle"
-                  fontSize="16"
+                  fontSize="15"
                   fontWeight="bold"
-                  fill={hex.number === 6 || hex.number === 8 ? '#FF0000' : '#000'}
+                  fill={hex.number === 6 || hex.number === 8 ? '#C62828' : '#3E2723'}
                 >
                   {hex.number}
                 </text>
+                {/* Probability dots */}
+                <text
+                  x={center.x}
+                  y={center.y + 14}
+                  textAnchor="middle"
+                  fontSize="6"
+                  fill={hex.number === 6 || hex.number === 8 ? '#C62828' : '#795548'}
+                >
+                  {'●'.repeat(getProbDots(hex.number))}
+                </text>
               </>
             )}
-            {/* Robber */}
+            {/* Robber figure */}
             {hex.hasRobber && (
-              <circle
-                cx={center.x}
-                cy={center.y}
-                r="15"
-                fill="#333"
-                opacity="0.8"
-              />
+              <g>
+                <circle cx={center.x} cy={center.y} r="13" fill="#1a1a1a" stroke="#444" strokeWidth="1.5" />
+                <text x={center.x} y={center.y + 5} textAnchor="middle" fontSize="14" fill="#EF5350">🗡</text>
+              </g>
             )}
           </g>
         );
@@ -804,16 +858,14 @@ export default function CatanGamePage() {
 
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-blue-950 via-cyan-950 to-emerald-950">
-      {/* === FULL-SCREEN BOARD === */}
-      <div className="absolute inset-0 z-0 flex items-center justify-center p-16">
-        <div className="w-full h-full max-w-4xl">
-          <HexBoard 
-            gameState={gameState}
-            onHexClick={handleHexClick}
-            onVertexClick={showVertexTargets ? handleVertexClick : undefined}
-            onEdgeClick={showEdgeTargets ? handleEdgeClick : undefined}
-          />
-        </div>
+      {/* === FULL-SCREEN 3D BOARD === */}
+      <div className="absolute inset-0 z-0">
+        <CatanBoard3D
+          gameState={gameState}
+          onHexClick={handleHexClick}
+          onVertexClick={showVertexTargets ? handleVertexClick : undefined}
+          onEdgeClick={showEdgeTargets ? handleEdgeClick : undefined}
+        />
       </div>
 
       {/* === FLOATING HEADER === */}

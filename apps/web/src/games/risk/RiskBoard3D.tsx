@@ -80,8 +80,8 @@ function TerritoryPiece({ territory, playerColor, continentColor, isSelected, is
     <group ref={groupRef} position={[pos[0], pos[1], pos[2]]}>
       {/* Continent background circle (always visible, shows which continent) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
-        <circleGeometry args={[1.1, 24]} />
-        <meshStandardMaterial color={continentColor} roughness={0.8} transparent opacity={0.35} />
+        <circleGeometry args={[1.3, 24]} />
+        <meshStandardMaterial color={continentColor} roughness={0.8} transparent opacity={0.4} />
       </mesh>
 
       {/* Highlight ring when selected/attacking */}
@@ -101,7 +101,7 @@ function TerritoryPiece({ territory, playerColor, continentColor, isSelected, is
         onPointerOut={() => setHovered(false)}
         castShadow
       >
-        <cylinderGeometry args={[0.8, 0.8, 0.08, 24]} />
+        <cylinderGeometry args={[1.0, 1.0, 0.1, 24]} />
         <meshStandardMaterial
           color={playerColor}
           roughness={0.5}
@@ -178,29 +178,30 @@ function TerritoryPiece({ territory, playerColor, continentColor, isSelected, is
 
       {/* Army count — large, always visible */}
       <Text
-        position={[0, 0.06, 0.55]}
+        position={[0, 0.12, 0.7]}
         rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.3}
+        fontSize={0.4}
         color="#FFFFFF"
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.04}
+        outlineWidth={0.05}
         outlineColor="#000"
+        fontWeight="bold"
       >
         {String(territory.armies)}
       </Text>
 
       {/* Territory name — always visible, below the piece */}
       <Text
-        position={[0, 0.02, -0.65]}
+        position={[0, 0.02, -0.85]}
         rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.18}
+        fontSize={0.22}
         color="#FFFFFF"
         anchorX="center"
         anchorY="middle"
-        outlineWidth={0.025}
+        outlineWidth={0.03}
         outlineColor="#000"
-        fillOpacity={hovered ? 1 : 0.85}
+        fillOpacity={hovered ? 1 : 0.9}
       >
         {territory.name}
       </Text>

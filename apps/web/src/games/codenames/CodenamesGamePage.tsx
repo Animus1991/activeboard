@@ -73,23 +73,32 @@ function Card({ card, isSpymaster, canGuess, onGuess }: CardProps) {
       onClick={() => canGuess && !card.isRevealed && onGuess(card.id)}
       disabled={!canGuess || card.isRevealed}
       className={`
-        relative p-3 rounded-lg border-2 font-bold text-sm uppercase tracking-wide
-        transition-all duration-200 min-h-[70px] flex items-center justify-center
+        relative rounded-xl border-2 font-bold text-sm uppercase tracking-wider
+        transition-all duration-300 min-h-[80px] flex flex-col items-center justify-center gap-1
         ${getCardColor()}
-        ${canGuess && !card.isRevealed ? 'cursor-pointer transform hover:scale-105 shadow-md' : ''}
-        ${card.isRevealed ? 'opacity-90' : ''}
+        ${canGuess && !card.isRevealed ? 'cursor-pointer transform hover:scale-[1.06] hover:-translate-y-1 shadow-lg hover:shadow-xl' : ''}
+        ${card.isRevealed ? 'shadow-inner' : 'shadow-md'}
+        ${!card.isRevealed && !isSpymaster ? 'bg-gradient-to-b from-white to-slate-50 border-slate-200' : ''}
       `}
+      style={{
+        textShadow: card.isRevealed ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+      }}
     >
-      <span className="text-center leading-tight">{card.word}</span>
+      <span className="text-center leading-tight px-2 text-[13px]">{card.word}</span>
       {card.isRevealed && (
-        <div className="absolute top-1 right-1">
+        <div className="absolute top-1.5 right-1.5 opacity-70">
           {getIcon()}
         </div>
       )}
       {isSpymaster && !card.isRevealed && card.type === 'assassin' && (
         <div className="absolute top-1 right-1">
-          <Skull className="w-4 h-4 text-slate-600" />
+          <Skull className="w-4 h-4 text-slate-500" />
         </div>
+      )}
+      {isSpymaster && !card.isRevealed && (
+        <div className={`absolute bottom-0.5 left-0 right-0 h-1 rounded-b-lg ${
+          card.type === 'red' ? 'bg-red-400' : card.type === 'blue' ? 'bg-blue-400' : card.type === 'assassin' ? 'bg-slate-700' : 'bg-amber-300'
+        }`} />
       )}
     </button>
   );
