@@ -96,6 +96,9 @@ export interface GameState {
   log: GameLogEntry[];
   devCardPlayedThisTurn: boolean;  // Max 1 dev card per turn
   freeRoadsRemaining: number;  // For road-building dev card
+  // INTERACTION MODEL
+  discardingPlayerIndex: number | null;  // Which player is currently discarding after a 7
+  lastPlacedSettlementVertexId: string | null;  // Setup road must connect to THIS vertex
 }
 
 export type GamePhase = 
@@ -361,6 +364,8 @@ export function createInitialGameState(playerNames: string[]): GameState {
     log: [],
     devCardPlayedThisTurn: false,
     freeRoadsRemaining: 0,
+    discardingPlayerIndex: null,
+    lastPlacedSettlementVertexId: null,
   };
 }
 
@@ -476,6 +481,11 @@ export function canBuildRoad(state: GameState, playerId: string, edgeId: string,
     if (!hasResources(player, BUILDING_COSTS.road)) return false;
   }
 
+  // SETUP RULE: road must connect to the MOST RECENTLY PLACED settlement (not any building)
+  if (isSetup && state.lastPlacedSettlementVertexId) {
+    return edge.vertexIds.includes(state.lastPlacedSettlementVertexId);
+  }
+
   // Must connect to own settlement/city or road
   const [v1, v2] = edge.vertexIds;
   const vertex1 = getVertex(state, v1);
@@ -526,12 +536,12 @@ export function performRoll(state: GameState): GameState {
   newState = addLog(newState, player.id, `rolled ${dice[0]} + ${dice[1]} = ${total}`, 'roll');
   
   if (total === 7) {
-    // Check if any player needs to discard
-    const needsDiscard = state.players.some(p => getTotalResources(p) > 7);
-    if (needsDiscard) {
-      return { ...newState, phase: 'discard' };
+    // Find the first player (starting from index 0) who must discard
+    const firstDiscardIdx = state.players.findIndex(p => getTotalResources(p) > 7);
+    if (firstDiscardIdx >= 0) {
+      return { ...newState, phase: 'discard', discardingPlayerIndex: firstDiscardIdx };
     }
-    return { ...newState, phase: 'robber-move' };
+    return { ...newState, phase: 'robber-move', discardingPlayerIndex: null };
   }
   
   // Distribute resources
@@ -596,6 +606,7 @@ export function buildSettlement(state: GameState, playerId: string, vertexId: st
     ...state,
     players: updatedPlayers,
     vertices: updatedVertices,
+    lastPlacedSettlementVertexId: vertexId,  // Record for setup road constraint
   };
   
   newState = addLog(newState, playerId, 'built a settlement', 'build');
@@ -794,13 +805,14 @@ export function discardResources(state: GameState, playerId: string, resources: 
   let newState: GameState = { ...state, players: updatedPlayers };
   newState = addLog(newState, playerId, `discarded ${totalToDiscard} resources`, 'system');
   
-  // Check if all players have discarded
-  const stillNeedsDiscard = newState.players.some(p => getTotalResources(p) > 7);
-  if (!stillNeedsDiscard) {
-    return { ...newState, phase: 'robber-move' };
+  // Advance to the next player who still needs to discard
+  const nextDiscardIdx = newState.players.findIndex((p, i) => i !== playerIndex && getTotalResources(p) > 7);
+  if (nextDiscardIdx >= 0) {
+    return { ...newState, discardingPlayerIndex: nextDiscardIdx };
   }
   
-  return newState;
+  // All players done discarding — proceed to robber move
+  return { ...newState, phase: 'robber-move', discardingPlayerIndex: null };
 }
 
 // ============================================================================
@@ -1160,7 +1172,13 @@ function updateLongestRoad(state: GameState): GameState {
     longestRoad: roadLengths.find(r => r.playerId === p.id)?.length || 0,
   }));
   
-  return { ...state, players: updatedPlayers, longestRoadPlayerId: newLongestRoadPlayer };
+  const lrResult: GameState = { ...state, players: updatedPlayers, longestRoadPlayerId: newLongestRoadPlayer };
+  // Win check: Longest Road can be the 10th VP during the current player's turn
+  const currentPlayer = lrResult.players[lrResult.currentPlayerIndex];
+  if (currentPlayer.victoryPoints >= VICTORY_POINTS_TO_WIN) {
+    return addLog({ ...lrResult, winner: currentPlayer.id, phase: 'game-over' }, currentPlayer.id, 'won the game!', 'system');
+  }
+  return lrResult;
 }
 
 export function updateLargestArmy(state: GameState): GameState {
@@ -1192,7 +1210,13 @@ export function updateLargestArmy(state: GameState): GameState {
       (p.id === state.largestArmyPlayerId ? 2 : 0),
   }));
   
-  return { ...state, players: updatedPlayers, largestArmyPlayerId: newLargestArmyPlayer };
+  const laResult: GameState = { ...state, players: updatedPlayers, largestArmyPlayerId: newLargestArmyPlayer };
+  // Win check: Largest Army can be the 10th VP during the current player's turn
+  const laCurrentPlayer = laResult.players[laResult.currentPlayerIndex];
+  if (laCurrentPlayer.victoryPoints >= VICTORY_POINTS_TO_WIN) {
+    return addLog({ ...laResult, winner: laCurrentPlayer.id, phase: 'game-over' }, laCurrentPlayer.id, 'won the game!', 'system');
+  }
+  return laResult;
 }
 
 // ============================================================================
@@ -1268,6 +1292,50 @@ export function advanceSetup(state: GameState): GameState {
 }
 
 // ============================================================================
+// INTERACTION MODEL — valid move sets for UI (rule-exact, no re-implementation needed in UI)
+// ============================================================================
+
+export function getValidSettlementVertices(state: GameState, playerId: string, isSetup = false): string[] {
+  return state.vertices.filter(v => canBuildSettlement(state, playerId, v.id, isSetup)).map(v => v.id);
+}
+
+export function getValidRoadEdges(state: GameState, playerId: string, isSetup = false): string[] {
+  return state.edges.filter(e => canBuildRoad(state, playerId, e.id, isSetup)).map(e => e.id);
+}
+
+export function getValidCityVertices(state: GameState, playerId: string): string[] {
+  return state.vertices.filter(v => canBuildCity(state, playerId, v.id)).map(v => v.id);
+}
+
+export function getValidRobberHexes(state: GameState): number[] {
+  // Robber must move to a DIFFERENT hex than its current position
+  return state.hexTiles.filter(h => h.id !== state.robberHexId).map(h => h.id);
+}
+
+export function getStealablePlayerIds(state: GameState, hexId: number, activePlayerId: string): string[] {
+  // All players (not self) with a building adjacent to hexId AND who have at least 1 resource
+  const adjacent = state.vertices.filter(
+    v => v.hexIds.includes(hexId) && v.building && v.building.playerId !== activePlayerId
+  );
+  const unique = [...new Set(adjacent.map(v => v.building!.playerId))];
+  // Only players who have resources to steal
+  return unique.filter(pid => {
+    const p = state.players.find(pl => pl.id === pid);
+    return p && getTotalResources(p) > 0;
+  });
+}
+
+// VP visible to a specific observer — hides unplayed VP dev cards from opponents
+export function computePublicVictoryPoints(state: GameState, playerId: string, observingPlayerId: string): number {
+  const player = state.players.find(p => p.id === playerId);
+  if (!player) return 0;
+  if (playerId === observingPlayerId) return player.victoryPoints;
+  // Subtract hidden VP cards (bought but not yet revealed by winning)
+  const hiddenVP = player.developmentCards.filter(c => c.type === 'victory-point' && !c.isPlayed).length;
+  return player.victoryPoints - hiddenVP;
+}
+
+// ============================================================================
 // HELPERS
 // ============================================================================
 
@@ -1340,6 +1408,13 @@ export default {
   getPlayerTradeRatio,
   endTurn,
   advanceSetup,
+  // Interaction model helpers
+  getValidSettlementVertices,
+  getValidRoadEdges,
+  getValidCityVertices,
+  getValidRobberHexes,
+  getStealablePlayerIds,
+  computePublicVictoryPoints,
   TERRAIN_RESOURCES,
   BUILDING_COSTS,
   DEVELOPMENT_CARD_COST,
