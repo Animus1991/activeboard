@@ -467,29 +467,35 @@ export function canBuildCity(state: GameState, playerId: string, vertexId: strin
 export function canBuildRoad(state: GameState, playerId: string, edgeId: string, isSetup: boolean = false): boolean {
   const player = state.players.find(p => p.id === playerId);
   const edge = getEdge(state, edgeId);
-  
+
   if (!player || !edge) return false;
   if (edge.road) return false;  // Already has road
   if (player.roads <= 0) return false;
-  
+
   if (!isSetup) {
     if (!hasResources(player, BUILDING_COSTS.road)) return false;
   }
-  
+
   // Must connect to own settlement/city or road
   const [v1, v2] = edge.vertexIds;
   const vertex1 = getVertex(state, v1);
   const vertex2 = getVertex(state, v2);
-  
-  const hasOwnBuilding = 
+
+  const hasOwnBuilding =
     (vertex1?.building?.playerId === playerId) ||
     (vertex2?.building?.playerId === playerId);
-  
+
+  // A connected own road is only valid if the shared vertex is NOT blocked by an opponent's building
   const hasConnectedRoad = state.edges.some(e => {
     if (!e.road || e.road.playerId !== playerId) return false;
-    return e.vertexIds.some(vid => edge.vertexIds.includes(vid));
+    const sharedVid = e.vertexIds.find(vid => edge.vertexIds.includes(vid));
+    if (!sharedVid) return false;
+    const sharedVertex = getVertex(state, sharedVid);
+    // Opponent's building at the junction blocks road extension through it
+    if (sharedVertex?.building && sharedVertex.building.playerId !== playerId) return false;
+    return true;
   });
-  
+
   return hasOwnBuilding || hasConnectedRoad;
 }
 
@@ -906,13 +912,20 @@ export function canPlayDevCard(state: GameState, playerId: string, cardType: Dev
   const player = state.players.find(p => p.id === playerId);
   if (!player) return false;
   if (state.devCardPlayedThisTurn && cardType !== 'victory-point') return false;  // Max 1 non-VP card per turn
-  
+
   const card = player.developmentCards.find(c => c.type === cardType && !c.isPlayed && c.turnBought < state.turn);
   if (!card) return false;  // Must have unplayed card NOT bought this turn
-  
+
   // VP cards can only be revealed on winning turn (handled at checkWin)
   if (cardType === 'victory-point') return false;  // Never manually "played" — auto-revealed
-  
+
+  // Phase gate: knights can be played before rolling OR during main; all others only during main
+  if (cardType === 'knight') {
+    if (state.phase !== 'roll' && state.phase !== 'main') return false;
+  } else {
+    if (state.phase !== 'main') return false;
+  }
+
   return true;
 }
 
@@ -1037,7 +1050,11 @@ export function buildFreeRoad(state: GameState, playerId: string, edgeId: string
   const hasOwnBuilding = (vertex1?.building?.playerId === playerId) || (vertex2?.building?.playerId === playerId);
   const hasConnectedRoad = state.edges.some(e => {
     if (!e.road || e.road.playerId !== playerId) return false;
-    return e.vertexIds.some(vid => edge.vertexIds.includes(vid));
+    const sharedVid = e.vertexIds.find(vid => edge.vertexIds.includes(vid));
+    if (!sharedVid) return false;
+    const sharedVertex = getVertex(state, sharedVid);
+    if (sharedVertex?.building && sharedVertex.building.playerId !== playerId) return false;
+    return true;
   });
   if (!hasOwnBuilding && !hasConnectedRoad) return state;
   
@@ -1066,42 +1083,49 @@ export function buildFreeRoad(state: GameState, playerId: string, edgeId: string
 // LONGEST ROAD & LARGEST ARMY
 // ============================================================================
 
+// Recursive backtracking DFS for longest road — correctly handles branching
+function dfsLongestRoad(
+  state: GameState,
+  playerId: string,
+  vertexId: string,
+  visitedEdges: Set<string>
+): number {
+  const candidateEdges = state.edges.filter(e =>
+    e.road?.playerId === playerId &&
+    e.vertexIds.includes(vertexId) &&
+    !visitedEdges.has(e.id)
+  );
+  if (candidateEdges.length === 0) return 0;
+
+  let best = 0;
+  for (const edge of candidateEdges) {
+    const nextVertexId = edge.vertexIds.find(v => v !== vertexId)!;
+    const nextVertex = getVertex(state, nextVertexId);
+    visitedEdges.add(edge.id);
+    // Opponent building at the far end blocks further traversal but still counts this edge
+    if (nextVertex?.building && nextVertex.building.playerId !== playerId) {
+      best = Math.max(best, 1);
+    } else {
+      best = Math.max(best, 1 + dfsLongestRoad(state, playerId, nextVertexId, visitedEdges));
+    }
+    visitedEdges.delete(edge.id);
+  }
+  return best;
+}
+
 function calculateLongestRoad(state: GameState, playerId: string): number {
   const playerEdges = state.edges.filter(e => e.road?.playerId === playerId);
   if (playerEdges.length === 0) return 0;
-  
+
+  // Collect all endpoint vertices of player's roads as DFS start points
+  const vertexSet = new Set<string>();
+  playerEdges.forEach(e => e.vertexIds.forEach(v => vertexSet.add(v)));
+
   let maxLength = 0;
-  
-  // DFS from each edge
-  playerEdges.forEach(startEdge => {
-    const visited = new Set<string>();
-    const stack: { edgeId: string; length: number }[] = [{ edgeId: startEdge.id, length: 1 }];
-    
-    while (stack.length > 0) {
-      const { edgeId, length } = stack.pop()!;
-      if (visited.has(edgeId)) continue;
-      visited.add(edgeId);
-      
-      maxLength = Math.max(maxLength, length);
-      
-      const edge = state.edges.find(e => e.id === edgeId)!;
-      edge.vertexIds.forEach(vertexId => {
-        // Check if blocked by opponent's building
-        const vertex = getVertex(state, vertexId);
-        if (vertex?.building && vertex.building.playerId !== playerId) return;
-        
-        // Find connected roads
-        state.edges.forEach(nextEdge => {
-          if (nextEdge.road?.playerId !== playerId) return;
-          if (visited.has(nextEdge.id)) return;
-          if (!nextEdge.vertexIds.includes(vertexId)) return;
-          
-          stack.push({ edgeId: nextEdge.id, length: length + 1 });
-        });
-      });
-    }
+  vertexSet.forEach(vertexId => {
+    const len = dfsLongestRoad(state, playerId, vertexId, new Set<string>());
+    maxLength = Math.max(maxLength, len);
   });
-  
   return maxLength;
 }
 
