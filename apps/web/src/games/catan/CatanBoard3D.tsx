@@ -341,42 +341,42 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
         return (
-          <group position={[0, mat.height + 0.14, 0]}>
-            {/* Soft drop shadow */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.09, 0]}>
-              <circleGeometry args={[0.60, 32]} />
-              <meshBasicMaterial color="#000000" transparent opacity={0.28} />
+          <group position={[0, mat.height + 0.08, 0]}>
+            {/* Contact shadow */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]}>
+              <circleGeometry args={[0.56, 32]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.22} />
             </mesh>
-            {/* Disc body — larger, fully opaque, covers canvas centre zone */}
+            {/* Flat cardboard token disc — h=0.04, equal radii = no trapezoid dome */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.52, 0.54, 0.09, 36]} />
+              <cylinderGeometry args={[0.50, 0.50, 0.042, 40]} />
               <meshStandardMaterial
-                color="#EDD99A"
-                roughness={0.50}
+                color={hot ? '#F2E0C8' : '#EDD99A'}
+                roughness={0.62}
                 metalness={0.0}
-                emissive="#3C2800"
-                emissiveIntensity={0.18}
+                emissive="#000000"
+                emissiveIntensity={0}
               />
             </mesh>
-            {/* Number — centered, no rim, no face effect */}
+            {/* Number */}
             <Text
-              position={[0, 0.10, -0.04]}
+              position={[0, 0.066, -0.06]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={hot ? 0.42 : 0.38}
-              color={hot ? '#B81010' : '#2A1604'}
+              fontSize={hot ? 0.44 : 0.36}
+              color={hot ? '#AA0808' : '#28160C'}
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.024}
-              outlineColor={hot ? '#5A0000' : '#3A2008'}
+              outlineWidth={0.016}
+              outlineColor={hot ? '#4A0000' : '#2A1400'}
             >
               {String(hex.number)}
             </Text>
-            {/* Probability dots — directly below number on disc */}
+            {/* Probability pips */}
             <Text
-              position={[0, 0.10, 0.20]}
+              position={[0, 0.066, 0.18]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.078}
-              color={hot ? '#B81010' : '#6A4820'}
+              fontSize={0.072}
+              color={hot ? '#AA0808' : '#5A3C18'}
               anchorX="center"
               anchorY="middle"
             >
@@ -618,28 +618,17 @@ function Harbors() {
             >
               {harbor.label}
             </Text>
-            {/* Two wooden pier planks — shorter so they don’t reach terrain */}
-            {[-0.09, 0.09].map((off, pi) => (
-              <mesh key={pi}
-                position={[
-                  -nx*0.60 + Math.cos(pierAngle+Math.PI/2)*off,
-                  -0.004,
-                  -nz*0.60 + Math.sin(pierAngle+Math.PI/2)*off
-                ]}
-                rotation={[0, pierAngle, 0]} castShadow>
-                <boxGeometry args={[0.07, 0.042, 0.85]} />
-                <meshStandardMaterial color="#4A2C10" roughness={0.94} />
-              </mesh>
-            ))}
-            {/* Cross-planks */}
-            {[0.10, 0.40].map((frac, ci) => (
-              <mesh key={ci}
-                position={[-nx*(frac*0.85), 0.007, -nz*(frac*0.85)]}
-                rotation={[0, pierAngle+Math.PI/2, 0]}>
-                <boxGeometry args={[0.26, 0.028, 0.052]} />
-                <meshStandardMaterial color="#5C3A18" roughness={0.92} />
-              </mesh>
-            ))}
+            {/* Mooring posts — slim vertical cylinders, no planks */}
+            {[-0.18, 0, 0.18].map((off, pi) => {
+              const perpX = Math.cos(pierAngle + Math.PI/2) * off;
+              const perpZ = Math.sin(pierAngle + Math.PI/2) * off;
+              return (
+                <mesh key={pi} position={[-nx*0.55 + perpX, 0.06, -nz*0.55 + perpZ]} castShadow>
+                  <cylinderGeometry args={[0.028, 0.032, 0.14, 8]} />
+                  <meshStandardMaterial color="#3A2208" roughness={0.96} />
+                </mesh>
+              );
+            })}
           </group>
         );
       })}
@@ -666,33 +655,35 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
   return (
     <>
       {/* === CINEMATIC LIGHTING RIG === */}
-      {/* Soft warm ambient */}
-      <ambientLight intensity={0.40} color="#DDD4C0" />
-      {/* Key light — warm, hard shadows, high position */}
+      {/* Premium tabletop lighting rig */}
+      <ambientLight intensity={0.52} color="#E8DDD0" />
+      {/* Key: warm overhead, hard shadows */}
       <directionalLight
-        position={[10, 20, 8]}
-        intensity={1.6}
-        color="#FFF4E0"
+        position={[8, 22, 6]}
+        intensity={1.45}
+        color="#FFF8EC"
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
-        shadow-camera-far={50}
-        shadow-camera-left={-14}
-        shadow-camera-right={14}
-        shadow-camera-top={14}
-        shadow-camera-bottom={-14}
-        shadow-bias={-0.0004}
+        shadow-camera-far={55}
+        shadow-camera-left={-16}
+        shadow-camera-right={16}
+        shadow-camera-top={16}
+        shadow-camera-bottom={-16}
+        shadow-bias={-0.0003}
       />
-      {/* Cool fill from opposite side */}
-      <directionalLight position={[-9, 13, -7]} intensity={0.38} color="#C0D0EC" />
-      {/* Rim / back light */}
-      <directionalLight position={[0, 5, -16]} intensity={0.22} color="#D0C8FF" />
-      {/* Warm centre point glow */}
-      <pointLight position={[0, 9, 0]} intensity={0.55} color="#FFE8A0" distance={22} decay={2} />
+      {/* Fill: cool, soft, opposite side */}
+      <directionalLight position={[-10, 14, -8]} intensity={0.32} color="#B8CCE8" />
+      {/* Rim: subtle purple-blue from behind */}
+      <directionalLight position={[0, 6, -18]} intensity={0.16} color="#C8C0F8" />
+      {/* Warm centre bounce — gentle, no overbright */}
+      <pointLight position={[0, 10, 0]} intensity={0.42} color="#FFE4A0" distance={24} decay={2} />
+      {/* Side accent for depth */}
+      <pointLight position={[-12, 6, 0]} intensity={0.18} color="#A0B8D0" distance={20} decay={2} />
 
       {/* Camera */}
-      <PerspectiveCamera makeDefault position={[0, 16, 6]} fov={43} />
-      <OrbitControls enablePan enableZoom enableRotate minDistance={6} maxDistance={26} maxPolarAngle={Math.PI / 2.3} minPolarAngle={0.16} />
+      <PerspectiveCamera makeDefault position={[0, 19, 4.5]} fov={38} />
+      <OrbitControls enablePan enableZoom enableRotate minDistance={5} maxDistance={28} maxPolarAngle={Math.PI / 2.1} minPolarAngle={0.10} />
 
       {/* Background */}
       <color attach="background" args={['#07101E']} />
