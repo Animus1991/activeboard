@@ -1,38 +1,57 @@
 /**
- * TableForge — Catan 3D Board
- * Premium 3D hex board with terrain-specific PBR materials,
- * 3D settlements/cities/roads, orbital camera, lighting
+ * TableForge — Catan 3D Board  (AAA visual rewrite)
+ * Cinematic PBR materials · dramatic shadow lighting · ACES tone mapping
+ * Multi-layer terrain decorations · harbour ports · animated ocean
  */
 
-import { useRef, useState, useMemo, Suspense, useCallback } from 'react';
+import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, PerspectiveCamera, Html } from '@react-three/drei';
+import { OrbitControls, Text, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   type GameState,
   type HexTile,
   type Vertex,
-  type Edge,
-  TERRAIN_RESOURCES,
 } from './CatanEngine';
 
 // ============================================================================
 // TERRAIN MATERIALS — PBR-style colors per terrain type
 // ============================================================================
 
-// Colors matched to REAL physical Catan board (bright, saturated, vivid)
-const TERRAIN_MATS: Record<string, { base: string; top: string; accent: string; height: number }> = {
-  forest:    { base: '#2D8C2D', top: '#3DA83D', accent: '#4EC04E', height: 0.12 },  // Vivid green
-  hills:     { base: '#C4602A', top: '#D47030', accent: '#E08040', height: 0.18 },  // Warm terracotta/brick
-  pasture:   { base: '#6DBB45', top: '#85D060', accent: '#9AE075', height: 0.06 },  // Light bright green
-  fields:    { base: '#E8B820', top: '#F0C830', accent: '#F8D840', height: 0.05 },  // Golden yellow
-  mountains: { base: '#7A8A7A', top: '#909E90', accent: '#A0B0A0', height: 0.30 },  // Grey-green mountain
-  desert:    { base: '#E0C070', top: '#ECD088', accent: '#F0D898', height: 0.03 },  // Sandy beige
+// PBR terrain materials — vivid physical board colours + emissive depth
+const TERRAIN_MATS: Record<string, { base: string; top: string; emissive: string; height: number }> = {
+  forest:    { base: '#1A5C1A', top: '#226622', emissive: '#061806', height: 0.14 },
+  hills:     { base: '#A83818', top: '#C04820', emissive: '#3A0E06', height: 0.22 },
+  pasture:   { base: '#4EA030', top: '#62B840', emissive: '#122C08', height: 0.08 },
+  fields:    { base: '#D4980A', top: '#ECB010', emissive: '#483200', height: 0.07 },
+  mountains: { base: '#505C64', top: '#687480', emissive: '#0C1418', height: 0.36 },
+  desert:    { base: '#C8A040', top: '#DDB855', emissive: '#362C0C', height: 0.05 },
 };
 
-// Hex layout — larger tiles, tighter spacing like real board
-const HEX_SIZE = 1.25;
-const HEX_GAP = 0.02;
+const HEX_SIZE = 1.28;
+const HEX_GAP = 0.025;
+
+// Standard Catan harbour definitions — 9 ports, positioned between adjacent border hexes
+const HARBOR_DEFS = [
+  { hexA: {q:0,  r:-2}, hexB: {q:1,  r:-2}, type: '3:1',   label: '3:1'       },
+  { hexA: {q:1,  r:-2}, hexB: {q:2,  r:-2}, type: 'wood',  label: 'Wood\n2:1'  },
+  { hexA: {q:2,  r:-2}, hexB: {q:2,  r:-1}, type: '3:1',   label: '3:1'       },
+  { hexA: {q:2,  r:-1}, hexB: {q:2,  r:0 }, type: 'ore',   label: 'Ore\n2:1'  },
+  { hexA: {q:2,  r:0 }, hexB: {q:1,  r:1 }, type: 'wheat', label: 'Wheat\n2:1'},
+  { hexA: {q:0,  r:2 }, hexB: {q:-1, r:2 }, type: '3:1',   label: '3:1'       },
+  { hexA: {q:-1, r:2 }, hexB: {q:-2, r:2 }, type: 'brick', label: 'Brick\n2:1'},
+  { hexA: {q:-2, r:1 }, hexB: {q:-2, r:0 }, type: 'sheep', label: 'Sheep\n2:1'},
+  { hexA: {q:-2, r:0 }, hexB: {q:-1, r:-1}, type: '3:1',   label: '3:1'       },
+] as const;
+
+const HARBOR_COLORS: Record<string, string> = {
+  '3:1':   '#C8960A',
+  'wood':  '#2E7D32',
+  'brick': '#C0360C',
+  'sheep': '#4C8A28',
+  'wheat': '#D49808',
+  'ore':   '#485E6A',
+};
 
 // Convert axial (q,r) to 3D position
 function hexToWorld(q: number, r: number): [number, number, number] {
@@ -69,112 +88,130 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
   const pos = useMemo(() => hexToWorld(hex.position.q, hex.position.r), [hex.position]);
   const mat = TERRAIN_MATS[hex.terrain] || TERRAIN_MATS.desert;
 
-  const hexShape = useMemo(() => createHexShape(HEX_SIZE), []);
+  const hexShape  = useMemo(() => createHexShape(HEX_SIZE), []);
+  const seam      = useMemo(() => createHexShape(HEX_SIZE * 1.018), []);
   const extrudeSettings = useMemo(() => ({
     depth: mat.height,
     bevelEnabled: true,
-    bevelThickness: 0.02,
-    bevelSize: 0.03,
-    bevelSegments: 2,
+    bevelThickness: 0.04,
+    bevelSize: 0.04,
+    bevelSegments: 3,
+  }), [mat.height]);
+  const seamSettings = useMemo(() => ({
+    depth: mat.height + 0.01,
+    bevelEnabled: false,
   }), [mat.height]);
 
   return (
     <group position={[pos[0], 0, pos[2]]}>
-      {/* Hex base — extruded terrain */}
+      {/* Dark seam border — renders behind body */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.004, 0]} receiveShadow>
+        <extrudeGeometry args={[seam, seamSettings]} />
+        <meshStandardMaterial color="#100C06" roughness={1} />
+      </mesh>
+
+      {/* Hex body */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0, 0]}
         onClick={() => onHexClick?.(hex.id)}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
-        castShadow
-        receiveShadow
+        castShadow receiveShadow
       >
         <extrudeGeometry args={[hexShape, extrudeSettings]} />
         <meshStandardMaterial
           color={mat.base}
-          roughness={0.85}
+          roughness={0.88}
           metalness={0.02}
-          emissive={hovered ? '#333' : '#000'}
-          emissiveIntensity={hovered ? 0.2 : 0}
+          emissive={hovered ? '#442200' : mat.emissive}
+          emissiveIntensity={hovered ? 0.5 : 0.35}
         />
       </mesh>
 
-      {/* Top surface — slightly lighter */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, mat.height + 0.005, 0]}>
+      {/* Top surface — slightly lighter + emissive */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, mat.height + 0.003, 0]} receiveShadow>
         <shapeGeometry args={[hexShape]} />
-        <meshStandardMaterial color={mat.top} roughness={0.9} />
+        <meshStandardMaterial color={mat.top} roughness={0.92} emissive={mat.emissive} emissiveIntensity={0.18} />
       </mesh>
 
       {/* Terrain decoration — small features per type */}
       <TerrainDecoration terrain={hex.terrain} height={mat.height} />
 
-      {/* Number token — large, prominent, matching real Catan */}
-      {hex.number && !hex.hasRobber && (
-        <group position={[0, mat.height + 0.02, 0]}>
-          {/* Token disc — cream colored, prominent */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
-            <cylinderGeometry args={[0.42, 0.42, 0.06, 32]} />
-            <meshStandardMaterial
-              color="#F5E6C8"
-              roughness={0.5}
-              metalness={0.02}
-            />
-          </mesh>
-          {/* Token rim — darker edge */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.42, 0.015, 8, 32]} />
-            <meshStandardMaterial color="#8B7355" roughness={0.6} />
-          </mesh>
-          {/* Number — large and bold */}
-          <Text
-            position={[0, 0.06, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            fontSize={0.30}
-            color={hex.number === 6 || hex.number === 8 ? '#C62828' : '#2E1A08'}
-            anchorX="center"
-            anchorY="middle"
-            outlineWidth={0.015}
-            outlineColor={hex.number === 6 || hex.number === 8 ? '#8B0000' : '#5D4037'}
-          >
-            {String(hex.number)}
-          </Text>
-          {/* Probability dots — larger */}
-          <Text
-            position={[0, 0.06, 0.22]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            fontSize={0.07}
-            color={hex.number === 6 || hex.number === 8 ? '#C62828' : '#6D4C41'}
-            anchorX="center"
-            anchorY="middle"
-          >
-            {'●'.repeat(getProbDots(hex.number))}
-          </Text>
-        </group>
-      )}
+      {/* Number token */}
+      {hex.number && !hex.hasRobber && (() => {
+        const hot = hex.number === 6 || hex.number === 8;
+        return (
+          <group position={[0, mat.height + 0.12, 0]}>
+            {/* Drop shadow */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]}>
+              <circleGeometry args={[0.50, 32]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.30} />
+            </mesh>
+            {/* Disc body */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.44, 0.46, 0.08, 32]} />
+              <meshStandardMaterial
+                color="#F0DCA8"
+                roughness={0.52}
+                metalness={0.0}
+                emissive="#3C2400"
+                emissiveIntensity={0.22}
+              />
+            </mesh>
+            {/* Carved rim */}
+            <mesh position={[0, 0.045, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.445, 0.026, 8, 32]} />
+              <meshStandardMaterial color="#5C3A14" roughness={0.72} />
+            </mesh>
+            {/* Number */}
+            <Text
+              position={[0, 0.09, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.36}
+              color={hot ? '#C41818' : '#2A1604'}
+              anchorX="center"
+              anchorY="middle"
+              outlineWidth={0.020}
+              outlineColor={hot ? '#6A0000' : '#4A2C08'}
+            >
+              {String(hex.number)}
+            </Text>
+            {/* Probability dots */}
+            <Text
+              position={[0, 0.09, 0.25]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.080}
+              color={hot ? '#C41818' : '#7A5830'}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {'●'.repeat(getProbDots(hex.number))}
+            </Text>
+          </group>
+        );
+      })()}
 
       {/* Robber */}
       {hex.hasRobber && (
-        <group position={[0, mat.height + 0.02, 0]}>
-          {/* Robber body */}
-          <mesh position={[0, 0.2, 0]} castShadow>
-            <capsuleGeometry args={[0.12, 0.25, 4, 8]} />
-            <meshStandardMaterial color="#1a1a1a" roughness={0.6} metalness={0.3} />
+        <group position={[0, mat.height + 0.04, 0]}>
+          <mesh position={[0, 0.22, 0]} castShadow>
+            <capsuleGeometry args={[0.14, 0.30, 6, 12]} />
+            <meshStandardMaterial color="#0E0E0E" roughness={0.45} metalness={0.45} emissive="#1A0000" emissiveIntensity={0.4} />
           </mesh>
-          {/* Robber head */}
-          <mesh position={[0, 0.48, 0]} castShadow>
-            <sphereGeometry args={[0.1, 8, 8]} />
-            <meshStandardMaterial color="#1a1a1a" roughness={0.6} metalness={0.3} />
+          <mesh position={[0, 0.56, 0]} castShadow>
+            <sphereGeometry args={[0.13, 12, 12]} />
+            <meshStandardMaterial color="#0E0E0E" roughness={0.45} metalness={0.45} />
           </mesh>
-          {/* Red eyes glow */}
-          <mesh position={[0.04, 0.48, 0.08]}>
-            <sphereGeometry args={[0.02, 6, 6]} />
-            <meshBasicMaterial color="#FF0000" />
+          <mesh position={[0, 0.68, 0]}>
+            <coneGeometry args={[0.14, 0.14, 8]} />
+            <meshStandardMaterial color="#1A0000" roughness={0.6} />
           </mesh>
-          <mesh position={[-0.04, 0.48, 0.08]}>
-            <sphereGeometry args={[0.02, 6, 6]} />
-            <meshBasicMaterial color="#FF0000" />
-          </mesh>
+          {([-0.055, 0.055] as number[]).map((ox, i) => (
+            <mesh key={i} position={[ox, 0.565, 0.11]}>
+              <sphereGeometry args={[0.028, 8, 8]} />
+              <meshBasicMaterial color="#FF1800" />
+            </mesh>
+          ))}
         </group>
       )}
     </group>
@@ -191,59 +228,77 @@ function getProbDots(n: number): number {
 // ============================================================================
 
 function TerrainDecoration({ terrain, height }: { terrain: string; height: number }) {
-  const y = height + 0.01;
+  const y = height + 0.02;
 
   switch (terrain) {
-    case 'forest':
+    case 'forest': {
+      const trees: [number, number, number][] = [
+        [-0.64, 0.22, 1.00], [0.60, -0.30, 1.15], [-0.24, -0.66, 0.90],
+        [0.66, 0.34, 1.10], [-0.52, -0.50, 0.95], [0.08, 0.64, 1.05],
+      ];
       return (
         <group position={[0, y, 0]}>
-          {/* Trees */}
-          {[[-0.3, 0.2], [0.25, -0.15], [0, 0.35], [-0.2, -0.3], [0.35, 0.25]].map(([x, z], i) => (
-            <group key={i} position={[x, 0, z]}>
-              <mesh position={[0, 0.12, 0]} castShadow>
-                <coneGeometry args={[0.08, 0.25, 6]} />
-                <meshStandardMaterial color="#1B5E20" roughness={0.9} />
+          {trees.map(([x, z, sc], i) => (
+            <group key={i} position={[x, 0, z]} scale={[sc, sc, sc]}>
+              <mesh position={[0, 0.07, 0]} castShadow>
+                <cylinderGeometry args={[0.055, 0.075, 0.14, 6]} />
+                <meshStandardMaterial color="#3B1E08" roughness={0.95} />
               </mesh>
-              <mesh position={[0, 0, 0]}>
-                <cylinderGeometry args={[0.02, 0.025, 0.08, 4]} />
-                <meshStandardMaterial color="#4E342E" roughness={0.9} />
+              <mesh position={[0, 0.26, 0]} castShadow>
+                <coneGeometry args={[0.24, 0.38, 7]} />
+                <meshStandardMaterial color="#164E16" roughness={0.82} emissive="#041204" emissiveIntensity={0.35} />
+              </mesh>
+              <mesh position={[0, 0.50, 0]} castShadow>
+                <coneGeometry args={[0.18, 0.32, 7]} />
+                <meshStandardMaterial color="#1E6C1E" roughness={0.80} emissive="#051405" emissiveIntensity={0.35} />
+              </mesh>
+              <mesh position={[0, 0.70, 0]} castShadow>
+                <coneGeometry args={[0.11, 0.24, 7]} />
+                <meshStandardMaterial color="#268426" roughness={0.78} emissive="#062006" emissiveIntensity={0.35} />
               </mesh>
             </group>
           ))}
         </group>
       );
-    case 'mountains':
+    }
+    case 'mountains': {
+      const peaks: [number, number, number][] = [
+        [-0.52, -0.18, 0.90], [0.48, -0.26, 1.10],
+        [0.05, 0.56, 1.25],   [-0.16, 0.24, 0.70],
+      ];
       return (
         <group position={[0, y, 0]}>
-          {/* Mountain peaks */}
-          {[[-0.15, 0], [0.2, 0.1], [0, -0.2]].map(([x, z], i) => (
-            <group key={i}>
-              <mesh position={[x, 0.15, z]} castShadow>
-                <coneGeometry args={[0.18, 0.35, 5]} />
-                <meshStandardMaterial color="#546E7A" roughness={0.9} />
+          {peaks.map(([x, z, sc], i) => (
+            <group key={i} scale={[sc, sc, sc]}>
+              <mesh position={[x, 0.10, z]} castShadow>
+                <coneGeometry args={[0.26, 0.58, 6]} />
+                <meshStandardMaterial color="#6A7880" roughness={0.90} metalness={0.06} emissive="#0C1418" emissiveIntensity={0.32} />
               </mesh>
-              {/* Snow cap */}
-              <mesh position={[x, 0.3, z]}>
-                <coneGeometry args={[0.08, 0.1, 5]} />
-                <meshStandardMaterial color="#ECEFF1" roughness={0.5} />
+              <mesh position={[x, 0.34, z]}>
+                <coneGeometry args={[0.10, 0.18, 6]} />
+                <meshStandardMaterial color="#ECF0F4" roughness={0.38} emissive="#B0C4D8" emissiveIntensity={0.18} />
               </mesh>
             </group>
           ))}
         </group>
       );
+    }
     case 'hills':
       return (
         <group position={[0, y, 0]}>
           {/* Brick kiln */}
-          <mesh position={[0, 0.06, 0]} castShadow>
-            <boxGeometry args={[0.15, 0.12, 0.1]} />
-            <meshStandardMaterial color="#8D6E37" roughness={0.8} />
+          <mesh position={[0.52, 0.07, 0.08]} castShadow>
+            <boxGeometry args={[0.24, 0.20, 0.18]} />
+            <meshStandardMaterial color="#7A4E1A" roughness={0.80} emissive="#1C0800" emissiveIntensity={0.28} />
           </mesh>
-          {/* Small hills */}
-          {[[0.3, 0.1], [-0.25, -0.2]].map(([x, z], i) => (
-            <mesh key={i} position={[x, 0.04, z]} castShadow>
-              <sphereGeometry args={[0.12, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
-              <meshStandardMaterial color="#A0522D" roughness={0.9} />
+          <mesh position={[0.52, 0.22, 0.08]} castShadow>
+            <cylinderGeometry args={[0.046, 0.056, 0.16, 6]} />
+            <meshStandardMaterial color="#4A2A0C" roughness={0.86} />
+          </mesh>
+          {[[-0.54, 0.38], [0.12, -0.58], [-0.18, 0.62]].map(([x, z], i) => (
+            <mesh key={i} position={[x, 0.056, z]} castShadow>
+              <sphereGeometry args={[0.15, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color="#A03418" roughness={0.88} emissive="#280A04" emissiveIntensity={0.28} />
             </mesh>
           ))}
         </group>
@@ -251,38 +306,54 @@ function TerrainDecoration({ terrain, height }: { terrain: string; height: numbe
     case 'pasture':
       return (
         <group position={[0, y, 0]}>
-          {/* Sheep (simplified) */}
-          {[[-0.2, 0.15], [0.15, -0.1], [0.3, 0.25]].map(([x, z], i) => (
+          {[[-0.62, 0.24], [0.52, -0.34], [0.30, 0.58], [-0.26, -0.60]].map(([x, z], i) => (
             <group key={i} position={[x, 0, z]}>
-              <mesh position={[0, 0.04, 0]} castShadow>
-                <sphereGeometry args={[0.05, 6, 6]} />
-                <meshStandardMaterial color="#F5F5F5" roughness={0.9} />
+              <mesh position={[0, 0.062, 0]} castShadow>
+                <sphereGeometry args={[0.076, 9, 9]} />
+                <meshStandardMaterial color="#EEEEEE" roughness={0.90} emissive="#202020" emissiveIntensity={0.08} />
               </mesh>
-              <mesh position={[0.03, 0.06, 0]}>
-                <sphereGeometry args={[0.025, 6, 6]} />
-                <meshStandardMaterial color="#212121" roughness={0.8} />
+              <mesh position={[0.062, 0.096, 0.026]}>
+                <sphereGeometry args={[0.040, 8, 8]} />
+                <meshStandardMaterial color="#D8D8D8" roughness={0.88} />
+              </mesh>
+              <mesh position={[0.090, 0.105, 0.060]}>
+                <sphereGeometry args={[0.012, 6, 6]} />
+                <meshBasicMaterial color="#111111" />
               </mesh>
             </group>
           ))}
-          {/* Stone fence */}
-          <mesh position={[0, 0.02, -0.35]} castShadow>
-            <boxGeometry args={[0.6, 0.04, 0.03]} />
-            <meshStandardMaterial color="#9E9E9E" roughness={0.9} />
+          <mesh position={[0, 0.026, -0.62]} castShadow>
+            <boxGeometry args={[0.88, 0.05, 0.05]} />
+            <meshStandardMaterial color="#888888" roughness={0.92} />
+          </mesh>
+          <mesh position={[-0.44, 0.026, -0.62]}>
+            <cylinderGeometry args={[0.024, 0.028, 0.22, 5]} />
+            <meshStandardMaterial color="#666666" roughness={0.9} />
+          </mesh>
+          <mesh position={[0.44, 0.026, -0.62]}>
+            <cylinderGeometry args={[0.024, 0.028, 0.22, 5]} />
+            <meshStandardMaterial color="#666666" roughness={0.9} />
           </mesh>
         </group>
       );
     case 'fields':
       return (
         <group position={[0, y, 0]}>
-          {/* Wheat stalks (simplified as thin cones) */}
-          {Array.from({ length: 12 }, (_, i) => {
-            const angle = (i / 12) * Math.PI * 2;
-            const r = 0.25 + (i % 3) * 0.1;
+          {Array.from({ length: 22 }, (_, i) => {
+            const angle = (i / 22) * Math.PI * 2;
+            const r     = 0.50 + (i % 4) * 0.10;
+            const h     = 0.15 + (i % 3) * 0.04;
             return (
-              <mesh key={i} position={[Math.cos(angle) * r, 0.05, Math.sin(angle) * r]} castShadow>
-                <cylinderGeometry args={[0.005, 0.01, 0.12, 3]} />
-                <meshStandardMaterial color="#F9A825" roughness={0.9} />
-              </mesh>
+              <group key={i} position={[Math.cos(angle) * r, 0, Math.sin(angle) * r]}>
+                <mesh castShadow>
+                  <cylinderGeometry args={[0.009, 0.014, h, 4]} />
+                  <meshStandardMaterial color="#B88208" roughness={0.88} emissive="#3A2200" emissiveIntensity={0.32} />
+                </mesh>
+                <mesh position={[0, h / 2 + 0.046, 0]} castShadow>
+                  <boxGeometry args={[0.028, 0.065, 0.014]} />
+                  <meshStandardMaterial color="#D4A000" roughness={0.80} emissive="#4A2E00" emissiveIntensity={0.38} />
+                </mesh>
+              </group>
             );
           })}
         </group>
@@ -290,15 +361,30 @@ function TerrainDecoration({ terrain, height }: { terrain: string; height: numbe
     case 'desert':
       return (
         <group position={[0, y, 0]}>
-          {/* Sand dune */}
-          <mesh position={[0.2, 0.03, 0]} castShadow>
-            <sphereGeometry args={[0.15, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshStandardMaterial color="#E8C878" roughness={0.95} />
+          {[[0.56, 0.08, 0.18], [-0.46, 0.42, 0.14], [0.18, -0.58, 0.20]].map(([x, z, r], i) => (
+            <mesh key={i} position={[x, 0.045, z]} castShadow>
+              <sphereGeometry args={[r, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color="#C8A030" roughness={0.96} emissive="#301C00" emissiveIntensity={0.22} />
+            </mesh>
+          ))}
+          {/* Main cactus stem */}
+          <mesh position={[-0.54, 0.13, -0.08]} castShadow>
+            <cylinderGeometry args={[0.028, 0.036, 0.26, 7]} />
+            <meshStandardMaterial color="#2A6838" roughness={0.74} emissive="#061408" emissiveIntensity={0.30} />
           </mesh>
-          {/* Cactus */}
-          <mesh position={[-0.2, 0.08, 0.1]} castShadow>
-            <cylinderGeometry args={[0.02, 0.025, 0.16, 6]} />
-            <meshStandardMaterial color="#2E7D32" roughness={0.8} />
+          <mesh position={[-0.54, 0.28, -0.08]}>
+            <sphereGeometry args={[0.052, 8, 8]} />
+            <meshStandardMaterial color="#2A6838" roughness={0.74} emissive="#061408" emissiveIntensity={0.30} />
+          </mesh>
+          {/* Left arm */}
+          <mesh position={[-0.64, 0.20, -0.08]} rotation={[0, 0, 1.1]} castShadow>
+            <cylinderGeometry args={[0.020, 0.026, 0.14, 6]} />
+            <meshStandardMaterial color="#2A6838" roughness={0.74} />
+          </mesh>
+          {/* Right arm */}
+          <mesh position={[-0.44, 0.22, -0.08]} rotation={[0, 0, -1.3]} castShadow>
+            <cylinderGeometry args={[0.018, 0.024, 0.12, 6]} />
+            <meshStandardMaterial color="#2A6838" roughness={0.74} />
           </mesh>
         </group>
       );
@@ -321,36 +407,34 @@ function Building3D({ position, type, color }: Building3DProps) {
   if (type === 'city') {
     return (
       <group position={position}>
-        {/* City — larger stone building with tower */}
-        <mesh position={[0, 0.12, 0]} castShadow>
-          <boxGeometry args={[0.18, 0.24, 0.15]} />
-          <meshStandardMaterial color={color} roughness={0.5} metalness={0.15} />
+        <mesh position={[0, 0.14, 0]} castShadow>
+          <boxGeometry args={[0.20, 0.28, 0.17]} />
+          <meshStandardMaterial color={color} roughness={0.42} metalness={0.22} />
         </mesh>
-        {/* Tower */}
-        <mesh position={[0.06, 0.22, 0]} castShadow>
-          <boxGeometry args={[0.08, 0.12, 0.08]} />
-          <meshStandardMaterial color={color} roughness={0.5} metalness={0.2} />
+        <mesh position={[0.09, 0.27, 0]} castShadow>
+          <boxGeometry args={[0.10, 0.16, 0.10]} />
+          <meshStandardMaterial color={color} roughness={0.42} metalness={0.26} />
         </mesh>
-        {/* Roof */}
-        <mesh position={[0, 0.28, 0]} castShadow>
-          <coneGeometry args={[0.14, 0.1, 4]} />
-          <meshStandardMaterial color="#5D4037" roughness={0.8} />
+        <mesh position={[0, 0.33, 0]} castShadow>
+          <coneGeometry args={[0.16, 0.13, 4]} />
+          <meshStandardMaterial color="#3E2208" roughness={0.82} />
+        </mesh>
+        <mesh position={[0.09, 0.38, 0]} castShadow>
+          <coneGeometry args={[0.08, 0.09, 4]} />
+          <meshStandardMaterial color="#3E2208" roughness={0.82} />
         </mesh>
       </group>
     );
   }
-
   return (
     <group position={position}>
-      {/* Settlement — small cottage */}
-      <mesh position={[0, 0.08, 0]} castShadow>
-        <boxGeometry args={[0.12, 0.16, 0.1]} />
-        <meshStandardMaterial color={color} roughness={0.6} metalness={0.1} />
+      <mesh position={[0, 0.09, 0]} castShadow>
+        <boxGeometry args={[0.14, 0.18, 0.12]} />
+        <meshStandardMaterial color={color} roughness={0.55} metalness={0.14} />
       </mesh>
-      {/* Roof */}
-      <mesh position={[0, 0.19, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
-        <coneGeometry args={[0.1, 0.08, 4]} />
-        <meshStandardMaterial color="#795548" roughness={0.8} />
+      <mesh position={[0, 0.22, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
+        <coneGeometry args={[0.12, 0.10, 4]} />
+        <meshStandardMaterial color="#4A2C10" roughness={0.84} />
       </mesh>
     </group>
   );
@@ -402,18 +486,90 @@ function getVertexWorldPos(vertex: Vertex, hexTiles: HexTile[]): [number, number
 
 function Ocean() {
   const meshRef = useRef<THREE.Mesh>(null);
-  useFrame((state) => {
-    if (meshRef.current) {
-      const mat = meshRef.current.material as THREE.MeshStandardMaterial;
-      const t = state.clock.elapsedTime * 0.15;
-      mat.color.setRGB(0.05 + Math.sin(t) * 0.02, 0.2 + Math.sin(t + 1) * 0.03, 0.6 + Math.sin(t + 2) * 0.04);
-    }
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+    const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+    const t = clock.elapsedTime * 0.10;
+    mat.color.setRGB(
+      0.04 + Math.sin(t)        * 0.012,
+      0.20 + Math.sin(t + 1.3)  * 0.022,
+      0.62 + Math.sin(t + 2.6)  * 0.032,
+    );
   });
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow>
-      <circleGeometry args={[10, 48]} />
-      <meshStandardMaterial color="#1976D2" roughness={0.2} metalness={0.08} />
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+      <circleGeometry args={[12, 72]} />
+      <meshStandardMaterial color="#1565C0" roughness={0.14} metalness={0.14} />
     </mesh>
+  );
+}
+
+// ============================================================================
+// HARBORS — Port indicators on the ocean border
+// ============================================================================
+
+function Harbors() {
+  return (
+    <>
+      {HARBOR_DEFS.map((harbor, i) => {
+        const posA = hexToWorld(harbor.hexA.q, harbor.hexA.r);
+        const posB = hexToWorld(harbor.hexB.q, harbor.hexB.r);
+        const midX = (posA[0] + posB[0]) / 2;
+        const midZ = (posA[2] + posB[2]) / 2;
+        const len = Math.sqrt(midX * midX + midZ * midZ);
+        const nx = len > 0 ? midX / len : 0;
+        const nz = len > 0 ? midZ / len : 0;
+        // Push outward from board centre into ocean
+        const px = midX + nx * 1.6;
+        const pz = midZ + nz * 1.6;
+        const color = HARBOR_COLORS[harbor.type];
+        // Pier angle: box default extends along X, rotate to align with inward direction
+        const pierAngle = -Math.atan2(nz, nx);
+
+        return (
+          <group key={i} position={[px, 0.07, pz]}>
+            {/* Platform */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
+              <cylinderGeometry args={[0.56, 0.56, 0.06, 28]} />
+              <meshStandardMaterial color={color} roughness={0.58} metalness={0.10} emissive={color} emissiveIntensity={0.18} />
+            </mesh>
+            {/* Outer black ring */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.56, 0.038, 8, 28]} />
+              <meshStandardMaterial color="#0A0A0A" roughness={0.9} />
+            </mesh>
+            {/* Inner white ring accent */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
+              <ringGeometry args={[0.46, 0.50, 28]} />
+              <meshStandardMaterial color="#FFFFFF" transparent opacity={0.28} side={THREE.DoubleSide} />
+            </mesh>
+            {/* Label — large, bold, readable */}
+            <Text
+              position={[0, 0.075, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.18}
+              color="#FFFFFF"
+              anchorX="center"
+              anchorY="middle"
+              outlineWidth={0.022}
+              outlineColor="#000000"
+            >
+              {harbor.label}
+            </Text>
+            {/* Pier plank */}
+            <mesh position={[-nx * 0.90, -0.01, -nz * 0.90]} rotation={[0, pierAngle, 0]} castShadow>
+              <boxGeometry args={[0.13, 0.055, 1.80]} />
+              <meshStandardMaterial color="#5A3618" roughness={0.92} />
+            </mesh>
+            {/* Pier rail */}
+            <mesh position={[-nx * 0.90, 0.010, -nz * 0.90 - 0.05]} rotation={[0, pierAngle, 0]}>
+              <boxGeometry args={[0.09, 0.014, 1.70]} />
+              <meshStandardMaterial color="#7A4E28" roughness={0.88} />
+            </mesh>
+          </group>
+        );
+      })}
+    </>
   );
 }
 
@@ -435,28 +591,56 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
 
   return (
     <>
-      {/* Lighting — bright and warm, like a well-lit table */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[8, 15, 6]} intensity={1.0} castShadow shadow-mapSize={[2048, 2048]} color="#FFFAF0" />
-      <directionalLight position={[-5, 10, -4]} intensity={0.3} color="#E0E8F0" />
-      <pointLight position={[0, 6, 0]} intensity={0.15} color="#FFFACD" />
+      {/* === CINEMATIC LIGHTING RIG === */}
+      {/* Soft warm ambient */}
+      <ambientLight intensity={0.40} color="#DDD4C0" />
+      {/* Key light — warm, hard shadows, high position */}
+      <directionalLight
+        position={[10, 20, 8]}
+        intensity={1.6}
+        color="#FFF4E0"
+        castShadow
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-far={50}
+        shadow-camera-left={-14}
+        shadow-camera-right={14}
+        shadow-camera-top={14}
+        shadow-camera-bottom={-14}
+        shadow-bias={-0.0004}
+      />
+      {/* Cool fill from opposite side */}
+      <directionalLight position={[-9, 13, -7]} intensity={0.38} color="#C0D0EC" />
+      {/* Rim / back light */}
+      <directionalLight position={[0, 5, -16]} intensity={0.22} color="#D0C8FF" />
+      {/* Warm centre point glow */}
+      <pointLight position={[0, 9, 0]} intensity={0.55} color="#FFE8A0" distance={22} decay={2} />
 
       {/* Camera */}
-      <PerspectiveCamera makeDefault position={[0, 10, 7]} fov={50} />
-      <OrbitControls enablePan enableZoom enableRotate minDistance={5} maxDistance={20} maxPolarAngle={Math.PI / 2.2} minPolarAngle={0.2} />
+      <PerspectiveCamera makeDefault position={[0, 16, 6]} fov={43} />
+      <OrbitControls enablePan enableZoom enableRotate minDistance={6} maxDistance={26} maxPolarAngle={Math.PI / 2.3} minPolarAngle={0.16} />
 
       {/* Background */}
-      <color attach="background" args={['#0A1628']} />
-      <fog attach="fog" args={['#0A1628', 15, 30]} />
+      <color attach="background" args={['#07101E']} />
+      <fog attach="fog" args={['#07101E', 20, 38]} />
 
-      {/* Table surface */}
-      <mesh position={[0, -0.2, 0]} receiveShadow>
-        <cylinderGeometry args={[14, 14, 0.3, 48]} />
-        <meshStandardMaterial color="#3E2723" roughness={0.9} metalness={0.02} />
+      {/* Walnut table surface */}
+      <mesh position={[0, -0.22, 0]} receiveShadow>
+        <cylinderGeometry args={[16, 16, 0.36, 72]} />
+        <meshStandardMaterial
+          color="#1E1008"
+          roughness={0.86}
+          metalness={0.06}
+          emissive="#0C0600"
+          emissiveIntensity={0.20}
+        />
       </mesh>
 
       {/* Ocean */}
       <Ocean />
+
+      {/* Harbour port indicators */}
+      <Harbors />
 
       {/* Hex tiles */}
       {gameState.hexTiles.map(hex => (
@@ -546,7 +730,15 @@ interface CatanBoard3DProps {
 export default function CatanBoard3D({ gameState, onHexClick, onVertexClick, onEdgeClick }: CatanBoard3DProps) {
   return (
     <div className="w-full h-full bg-black overflow-hidden">
-      <Canvas shadows gl={{ antialias: true }} dpr={[1, 2]}>
+      <Canvas
+        shadows
+        gl={{
+          antialias: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.12,
+        }}
+        dpr={[1, 2]}
+      >
         <Suspense fallback={null}>
           <BoardContent
             gameState={gameState}

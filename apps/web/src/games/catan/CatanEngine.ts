@@ -163,6 +163,19 @@ export const STANDARD_NUMBERS: (number | null)[] = [
   5, 6, 11,
 ];
 
+// Standard Catan harbour assignments — 9 ports defined by pairs of adjacent border hexes
+const HARBOR_PORT_DEFS: { qa: number; ra: number; qb: number; rb: number; type: HarborType }[] = [
+  { qa:  0, ra: -2, qb:  1, rb: -2, type: '3:1'   },
+  { qa:  1, ra: -2, qb:  2, rb: -2, type: 'wood'  },
+  { qa:  2, ra: -2, qb:  2, rb: -1, type: '3:1'   },
+  { qa:  2, ra: -1, qb:  2, rb:  0, type: 'ore'   },
+  { qa:  2, ra:  0, qb:  1, rb:  1, type: 'wheat' },
+  { qa:  0, ra:  2, qb: -1, rb:  2, type: '3:1'   },
+  { qa: -1, ra:  2, qb: -2, rb:  2, type: 'brick' },
+  { qa: -2, ra:  1, qb: -2, rb:  0, type: 'sheep' },
+  { qa: -2, ra:  0, qb: -1, rb: -1, type: '3:1'   },
+];
+
 // Hex positions in axial coordinates (q, r)
 export const HEX_POSITIONS: { q: number; r: number }[] = [
   // Row 0 (top)
@@ -208,6 +221,21 @@ function getVertexId(hexIds: number[]): string {
 
 function getEdgeId(vertexIds: [string, string]): string {
   return vertexIds.sort().join('|');
+}
+
+function assignHarbors(hexTiles: HexTile[], vertices: Vertex[]): Vertex[] {
+  const updated = vertices.map(v => ({ ...v }));
+  for (const harbor of HARBOR_PORT_DEFS) {
+    const hexA = hexTiles.find(h => h.position.q === harbor.qa && h.position.r === harbor.ra);
+    const hexB = hexTiles.find(h => h.position.q === harbor.qb && h.position.r === harbor.rb);
+    if (!hexA || !hexB) continue;
+    for (const vertex of updated) {
+      if (vertex.hexIds.includes(hexA.id) && vertex.hexIds.includes(hexB.id)) {
+        vertex.harbor = harbor.type;
+      }
+    }
+  }
+  return updated;
 }
 
 function generateVerticesAndEdges(hexTiles: HexTile[]): { vertices: Vertex[]; edges: Edge[] } {
@@ -292,7 +320,8 @@ function generateDevelopmentCardDeck(): DevelopmentCardType[] {
 
 export function createInitialGameState(playerNames: string[]): GameState {
   const hexTiles = generateHexTiles();
-  const { vertices, edges } = generateVerticesAndEdges(hexTiles);
+  const { vertices: rawVertices, edges } = generateVerticesAndEdges(hexTiles);
+  const vertices = assignHarbors(hexTiles, rawVertices);
   const robberHex = hexTiles.find(h => h.terrain === 'desert')!;
 
   const players: Player[] = playerNames.map((name, index) => ({
