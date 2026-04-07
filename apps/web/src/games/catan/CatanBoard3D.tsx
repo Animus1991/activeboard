@@ -35,14 +35,37 @@ const HEX_GAP = 0.0;
 // CANVAS TERRAIN TEXTURES — illustrated board-game style artwork per tile
 // ============================================================================
 
+// Helper: draw a pine tree silhouette with no eyes/faces
+function drawTree(c: CanvasRenderingContext2D, tx: number, ty: number, sz: number) {
+  c.fillStyle = '#3B1E08';
+  c.fillRect(tx - sz*0.07, ty + sz*0.28, sz*0.14, sz*0.30);
+  [['#1A5C10', 1.0, 0], ['#226E14', 0.76, sz*0.20], ['#2E8418', 0.54, sz*0.38]].forEach(([col, wm, yOff]) => {
+    c.fillStyle = col as string;
+    c.beginPath();
+    c.moveTo(tx, ty - sz + (yOff as number));
+    c.lineTo(tx - sz*(wm as number)*0.54, ty + (yOff as number)*0.55);
+    c.lineTo(tx + sz*(wm as number)*0.54, ty + (yOff as number)*0.55);
+    c.closePath(); c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.16)';
+    c.beginPath();
+    c.moveTo(tx, ty - sz + (yOff as number));
+    c.lineTo(tx, ty + (yOff as number)*0.55);
+    c.lineTo(tx + sz*(wm as number)*0.54, ty + (yOff as number)*0.55);
+    c.closePath(); c.fill();
+  });
+  c.fillStyle = 'rgba(235,245,255,0.75)';
+  c.beginPath(); c.moveTo(tx, ty-sz); c.lineTo(tx-sz*0.08,ty-sz+sz*0.11); c.lineTo(tx+sz*0.08,ty-sz+sz*0.11); c.closePath(); c.fill();
+}
+
 function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
   const S = 512;
   const canvas = document.createElement('canvas');
   canvas.width = S; canvas.height = S;
   const c = canvas.getContext('2d')!;
   const cx = S / 2, cy = S / 2;
+  // CLEAR CENTRE RADIUS — kept free of decoration so number token reads cleanly
+  const SAFE = 115; // px radius around centre that stays decoration-free
 
-  // Hex clip
   c.save();
   c.beginPath();
   for (let i = 0; i < 6; i++) {
@@ -53,184 +76,132 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
   c.closePath(); c.clip();
 
   if (terrain === 'forest') {
-    // Background gradient
-    const bg = c.createRadialGradient(cx, cy, 0, cx, cy, S * 0.52);
-    bg.addColorStop(0, '#4A8C2A'); bg.addColorStop(1, '#1C4C0C');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Ground texture
-    c.fillStyle = '#2E6818'; c.fillRect(0, 0, S, S);
-    const floor = c.createRadialGradient(cx, cy + 60, 10, cx, cy, S * 0.5);
-    floor.addColorStop(0, 'rgba(80,160,30,0.4)'); floor.addColorStop(1, 'rgba(20,80,0,0.0)');
-    c.fillStyle = floor; c.fillRect(0, 0, S, S);
-    // Draw 7 pine trees
-    const treePos = [[cx,cy-60,90],[cx-110,cy+30,70],[cx+110,cy+20,72],[cx-60,cy+90,65],[cx+65,cy+85,62],[cx-130,cy-50,55],[cx+128,cy-40,58]] as [number,number,number][];
-    treePos.forEach(([tx, ty, sz]) => {
-      // Trunk
-      c.fillStyle = '#4A2808';
-      c.fillRect(tx - sz*0.07, ty + sz*0.3, sz*0.14, sz*0.35);
-      // Three foliage layers
-      [[0, 1.0, '#2E7010'], [sz*0.22, 0.78, '#3A8A18'], [sz*0.42, 0.56, '#4AA020']].forEach(([yOff, wm, col]) => {
-        c.fillStyle = col as string;
-        c.beginPath();
-        c.moveTo(tx, ty - (sz as number) + (yOff as number));
-        c.lineTo(tx - (sz as number) * (wm as number) * 0.55, ty + (yOff as number) * 0.6);
-        c.lineTo(tx + (sz as number) * (wm as number) * 0.55, ty + (yOff as number) * 0.6);
-        c.closePath(); c.fill();
-        // Shadow side
-        c.fillStyle = 'rgba(0,0,0,0.18)';
-        c.beginPath();
-        c.moveTo(tx, ty - (sz as number) + (yOff as number));
-        c.lineTo(tx, ty + (yOff as number) * 0.6);
-        c.lineTo(tx + (sz as number) * (wm as number) * 0.55, ty + (yOff as number) * 0.6);
-        c.closePath(); c.fill();
-      });
-      // Snow tip
-      c.fillStyle = 'rgba(240,248,255,0.82)';
-      c.beginPath(); c.moveTo(tx, ty - sz); c.lineTo(tx - sz*0.09, ty - sz + sz*0.12); c.lineTo(tx + sz*0.09, ty - sz + sz*0.12); c.closePath(); c.fill();
-    });
+    const bg = c.createRadialGradient(cx, cy, 0, cx, cy, S*0.52);
+    bg.addColorStop(0,'#3A7C1A'); bg.addColorStop(1,'#183C08');
+    c.fillStyle = bg; c.fillRect(0,0,S,S);
+    // Forest floor
+    c.fillStyle='rgba(20,60,0,0.30)'; c.fillRect(0,0,S,S);
+    // Trees ONLY outside safe radius — 6 corner positions
+    const treePts:([number,number,number])[] = [
+      [cx-155,cy-60,74],[cx+148,cy-55,68],[cx-155,cy+80,62],
+      [cx+150,cy+75,66],[cx-50,cy+178,58],[cx+55,cy+182,56]
+    ];
+    treePts.forEach(([tx,ty,sz]) => drawTree(c, tx, ty, sz));
+    // Subtle ground moss
+    c.fillStyle='rgba(60,130,20,0.18)'; c.fillRect(0,0,S,S);
+
   } else if (terrain === 'hills') {
-    // Terracotta background
-    const bg = c.createLinearGradient(0, 0, 0, S);
-    bg.addColorStop(0, '#D4602A'); bg.addColorStop(1, '#8C2C10');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Rolling clay hills
-    [[cx-80,cy+60,180,120,'#C04820'],[cx+90,cy+80,160,110,'#B83A18'],[cx,cy+140,220,90,'#A83018']].forEach(([hx,hy,rw,rh,col]) => {
-      c.fillStyle = col as string;
-      c.beginPath(); c.ellipse(hx as number, hy as number, rw as number, rh as number, 0, Math.PI, 0); c.closePath(); c.fill();
-    });
-    // Brick pattern on centre hill
-    c.fillStyle = 'rgba(80,20,0,0.35)';
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 6; col++) {
-        const bx = 140 + col * 44 + (row % 2) * 22;
-        const by = cy + 30 + row * 20;
-        c.fillRect(bx, by, 38, 15);
-        c.strokeStyle = '#FF8040'; c.lineWidth = 1; c.strokeRect(bx, by, 38, 15);
+    const bg = c.createLinearGradient(0,0,0,S);
+    bg.addColorStop(0,'#D05828'); bg.addColorStop(1,'#7C2408');
+    c.fillStyle=bg; c.fillRect(0,0,S,S);
+    // Clay hilltop highlight
+    const hl = c.createRadialGradient(cx-40,cy-60,10,cx-40,cy-60,190);
+    hl.addColorStop(0,'rgba(220,110,60,0.50)'); hl.addColorStop(1,'rgba(220,110,60,0)');
+    c.fillStyle=hl; c.fillRect(0,0,S,S);
+    // Brick rows pushed to lower-edge zone
+    c.fillStyle='rgba(60,15,0,0.40)';
+    for(let row=0;row<4;row++){
+      for(let col=0;col<5;col++){
+        const bx=130+col*50+(row%2)*25, by=cy+SAFE+10+row*22;
+        if(by>S*0.88) break;
+        c.fillRect(bx,by,42,16);
+        c.strokeStyle='rgba(255,100,40,0.35)'; c.lineWidth=1; c.strokeRect(bx,by,42,16);
       }
     }
-    // Light rays
-    const ray = c.createRadialGradient(cx, cy - 80, 10, cx, cy - 80, 200);
-    ray.addColorStop(0, 'rgba(255,200,100,0.25)'); ray.addColorStop(1, 'rgba(255,200,100,0)');
-    c.fillStyle = ray; c.fillRect(0, 0, S, S);
+    // Rolling hill silhouette top-edge
+    c.fillStyle='rgba(180,60,20,0.30)';
+    c.beginPath(); c.ellipse(cx,cy-SAFE-50,200,80,0,Math.PI,0); c.closePath(); c.fill();
+
   } else if (terrain === 'pasture') {
-    // Bright green background
-    const bg = c.createLinearGradient(0, 0, 0, S);
-    bg.addColorStop(0, '#98CC50'); bg.addColorStop(1, '#3A8C18');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Rolling hills
-    [[cx-60,cy+80,200,100,'#70B030'],[cx+80,cy+100,180,90,'#60A020'],[cx,cy+160,240,80,'#509018']].forEach(([hx,hy,rw,rh,col]) => {
-      c.fillStyle = col as string;
-      c.beginPath(); c.ellipse(hx as number, hy as number, rw as number, rh as number, 0, Math.PI, 0); c.closePath(); c.fill();
+    const bg = c.createLinearGradient(0,0,0,S);
+    bg.addColorStop(0,'#88C040'); bg.addColorStop(1,'#349010');
+    c.fillStyle=bg; c.fillRect(0,0,S,S);
+    // Rolling hill shapes at edges only
+    [[cx-60,cy+SAFE+60,200,80,'#5AA020'],[cx+70,cy+SAFE+75,180,70,'#4A9018']] .forEach(([hx,hy,rw,rh,col]) => {
+      c.fillStyle=col as string;
+      c.beginPath(); c.ellipse(hx as number,hy as number,rw as number,rh as number,0,Math.PI,0); c.closePath(); c.fill();
     });
-    // Fence
-    c.fillStyle = '#8B6914'; c.fillRect(80, cy+30, S-160, 8);
-    [100, 200, 310, 415].forEach(fx => { c.fillStyle='#8B6914'; c.fillRect(fx, cy+10, 10, 48); });
-    // Sheep (4 fluffy white blobs)
-    [[cx-80,cy-20],[cx+80,cy-10],[cx-30,cy+40],[cx+40,cy+50]].forEach(([sx,sy]) => {
-      c.fillStyle = '#F5F5F5';
-      // Body
-      c.beginPath(); c.ellipse(sx as number, sy as number, 36, 26, 0, 0, Math.PI*2); c.fill();
-      // Fleece bumps
-      ['#FFFFFF','#EEEEEE'].forEach((fc, fi) => {
-        c.fillStyle = fc;
-        [[-18,-10],[0,-18],[18,-10],[-24,0],[24,0]].forEach(([dx,dy]) => {
-          c.beginPath(); c.arc((sx as number)+dx, (sy as number)+dy+(fi*3), 14, 0, Math.PI*2); c.fill();
-        });
+    // Fence at bottom edge — well below safe zone
+    const fy = cy+SAFE+20;
+    c.fillStyle='#7A5C10'; c.fillRect(80,fy,S-160,7);
+    [100,190,295,400].forEach(fx=>{ c.fillStyle='#7A5C10'; c.fillRect(fx,fy-16,9,40); });
+    // Sheep as pure wool blobs (NO heads, NO eyes) pushed to corners
+    [[cx-168,cy-80],[cx+155,cy-70],[cx-150,cy+140],[cx+145,cy+130]].forEach(([sx,sy]) => {
+      c.fillStyle='rgba(245,245,240,0.92)';
+      c.beginPath(); c.ellipse(sx as number,sy as number,28,20,0,0,Math.PI*2); c.fill();
+      [[-14,-8],[0,-16],[14,-8],[-20,2],[20,2]].forEach(([dx,dy]) => {
+        c.fillStyle='#FFFFFF';
+        c.beginPath(); c.arc((sx as number)+dx,(sy as number)+dy,12,0,Math.PI*2); c.fill();
       });
-      // Head
-      c.fillStyle = '#333333';
-      c.beginPath(); c.arc((sx as number)+38, (sy as number)-4, 12, 0, Math.PI*2); c.fill();
-      // Eye
-      c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc((sx as number)+42, (sy as number)-7, 4, 0, Math.PI*2); c.fill();
-      c.fillStyle = '#000'; c.beginPath(); c.arc((sx as number)+43, (sy as number)-7, 2, 0, Math.PI*2); c.fill();
-      // Legs
-      c.fillStyle = '#888888'; c.strokeStyle='#666'; c.lineWidth=3;
-      [[-16,22],[-6,22],[10,22],[20,22]].forEach(([lx,ly]) => { c.beginPath(); c.moveTo((sx as number)+lx,(sy as number)+16); c.lineTo((sx as number)+lx,(sy as number)+ly+16); c.stroke(); });
     });
+
   } else if (terrain === 'fields') {
-    // Golden background
-    const bg = c.createLinearGradient(0, 0, 0, S);
-    bg.addColorStop(0, '#ECC030'); bg.addColorStop(0.6, '#C89010'); bg.addColorStop(1, '#8C5E00');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Rows of wheat
-    for (let row = 0; row < 7; row++) {
-      const ry = 80 + row * 60;
-      for (let col = 0; col < 9; col++) {
-        const wx = 40 + col * 52 + (row % 2) * 26;
-        // Stalk
-        c.strokeStyle = '#A87010'; c.lineWidth = 3;
-        c.beginPath(); c.moveTo(wx, ry+28); c.lineTo(wx, ry-28); c.stroke();
-        // Grain head
-        c.fillStyle = '#D4A000';
-        c.beginPath(); c.ellipse(wx, ry-36, 5, 18, 0, 0, Math.PI*2); c.fill();
-        // Grain segments
-        c.fillStyle = '#ECC040';
-        for (let k = 0; k < 4; k++) {
-          c.beginPath(); c.ellipse(wx + (k%2===0?-4:4), ry-28-k*10, 5, 8, k%2===0?-0.4:0.4, 0, Math.PI*2); c.fill();
+    const bg = c.createLinearGradient(0,0,0,S);
+    bg.addColorStop(0,'#EAC028'); bg.addColorStop(0.7,'#C08808'); bg.addColorStop(1,'#7A4E00');
+    c.fillStyle=bg; c.fillRect(0,0,S,S);
+    // Wheat rows — skip centre safe zone
+    for(let row=0;row<8;row++){
+      const ry=60+row*52;
+      for(let col=0;col<9;col++){
+        const wx=36+col*52+(row%2)*26;
+        const dx=wx-cx, dy=ry-cy;
+        if(dx*dx+dy*dy < SAFE*SAFE*0.85) continue; // skip centre
+        c.strokeStyle='#8C6008'; c.lineWidth=2.5;
+        c.beginPath(); c.moveTo(wx,ry+22); c.lineTo(wx,ry-22); c.stroke();
+        c.fillStyle='#C89000';
+        c.beginPath(); c.ellipse(wx,ry-28,4,14,0,0,Math.PI*2); c.fill();
+        c.fillStyle='#E0AA10';
+        for(let k=0;k<3;k++){
+          c.beginPath(); c.ellipse(wx+(k%2===0?-3:3),ry-22-k*8,4,7,k%2===0?-0.35:0.35,0,Math.PI*2); c.fill();
         }
       }
     }
-    // Warm light overlay
-    const glow = c.createRadialGradient(cx, cy-60, 20, cx, cy-60, 220);
-    glow.addColorStop(0, 'rgba(255,220,80,0.30)'); glow.addColorStop(1, 'rgba(255,220,80,0)');
-    c.fillStyle = glow; c.fillRect(0, 0, S, S);
+    const glow=c.createRadialGradient(cx,cy-40,20,cx,cy-40,200);
+    glow.addColorStop(0,'rgba(255,215,70,0.28)'); glow.addColorStop(1,'rgba(255,215,70,0)');
+    c.fillStyle=glow; c.fillRect(0,0,S,S);
+
   } else if (terrain === 'mountains') {
-    // Rocky grey background
-    const bg = c.createLinearGradient(0, S, 0, 0);
-    bg.addColorStop(0, '#364048'); bg.addColorStop(1, '#8090A0');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Mountain peaks (back to front)
-    const peaks = [[cx-100,cy+60,100,260,'#5A6870'],[cx+110,cy+50,90,240,'#506068'],[cx,cy+40,110,300,'#687880']] as [number,number,number,number,string][];
-    peaks.forEach(([px,py,pw,ph,col]) => {
-      c.fillStyle = col;
-      c.beginPath(); c.moveTo(px as number, py as number); c.lineTo((px as number)-(pw as number),(py as number)+(ph as number)*0.6); c.lineTo((px as number)+(pw as number),(py as number)+(ph as number)*0.6); c.closePath(); c.fill();
-      // Shadow face
-      c.fillStyle = 'rgba(0,0,0,0.22)';
-      c.beginPath(); c.moveTo(px as number, py as number); c.lineTo(px as number, (py as number)+(ph as number)*0.6); c.lineTo((px as number)+(pw as number),(py as number)+(ph as number)*0.6); c.closePath(); c.fill();
-      // Snow cap
-      c.fillStyle = '#ECF2F8';
-      c.beginPath(); c.moveTo(px as number, py as number);
-      c.lineTo((px as number)-(pw as number)*0.36, (py as number)+(ph as number)*0.22);
-      c.lineTo((px as number)+(pw as number)*0.36, (py as number)+(ph as number)*0.22);
-      c.closePath(); c.fill();
-      c.fillStyle = 'rgba(180,210,240,0.45)';
-      c.beginPath(); c.moveTo(px as number, py as number);
-      c.lineTo(px as number, (py as number)+(ph as number)*0.22);
-      c.lineTo((px as number)+(pw as number)*0.36, (py as number)+(ph as number)*0.22);
-      c.closePath(); c.fill();
+    const bg = c.createLinearGradient(0,S*0.8,0,0);
+    bg.addColorStop(0,'#303840'); bg.addColorStop(1,'#788898');
+    c.fillStyle=bg; c.fillRect(0,0,S,S);
+    // 3 peaks — tips above safe zone, bases spread to edges
+    ([
+      [cx-110,cy-SAFE-20,88,230,'#566470'],
+      [cx+105,cy-SAFE-10,82,210,'#4C5C68'],
+      [cx,   cy-SAFE-50,96,250,'#607080'],
+    ] as [number,number,number,number,string][]).forEach(([px,py,pw,ph,col]) => {
+      c.fillStyle=col;
+      c.beginPath(); c.moveTo(px,py); c.lineTo(px-pw,py+ph*0.55); c.lineTo(px+pw,py+ph*0.55); c.closePath(); c.fill();
+      c.fillStyle='rgba(0,0,0,0.20)';
+      c.beginPath(); c.moveTo(px,py); c.lineTo(px,py+ph*0.55); c.lineTo(px+pw,py+ph*0.55); c.closePath(); c.fill();
+      c.fillStyle='#E8F0F8';
+      c.beginPath(); c.moveTo(px,py); c.lineTo(px-pw*0.32,py+ph*0.18); c.lineTo(px+pw*0.32,py+ph*0.18); c.closePath(); c.fill();
     });
-    // Ore vein hints
-    c.strokeStyle = 'rgba(160,180,200,0.5)'; c.lineWidth = 3;
-    [[cx-60,cy+120,cx-20,cy+160],[cx+40,cy+110,cx+80,cy+150],[cx-10,cy+150,cx+30,cy+190]].forEach(([x1,y1,x2,y2]) => {
+    c.strokeStyle='rgba(150,175,200,0.45)'; c.lineWidth=3;
+    [[cx-70,cy+80,cx-30,cy+120],[cx+30,cy+70,cx+70,cy+110]].forEach(([x1,y1,x2,y2])=>{
       c.beginPath(); c.moveTo(x1 as number,y1 as number); c.lineTo(x2 as number,y2 as number); c.stroke();
     });
+
   } else if (terrain === 'desert') {
-    // Sandy gradient
-    const bg = c.createLinearGradient(0, 0, 0, S);
-    bg.addColorStop(0, '#E8C870'); bg.addColorStop(1, '#B88030');
-    c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Sand dunes
-    [[cx-60,cy+100,220,70,'#D4A840'],[cx+80,cy+140,200,60,'#C89030'],[cx,cy+180,260,55,'#BC8028']].forEach(([dx,dy,rw,rh,col]) => {
-      c.fillStyle = col as string;
-      c.beginPath(); c.ellipse(dx as number, dy as number, rw as number, rh as number, 0, Math.PI, 0); c.closePath(); c.fill();
+    const bg = c.createLinearGradient(0,0,0,S);
+    bg.addColorStop(0,'#E6C460'); bg.addColorStop(1,'#A87020');
+    c.fillStyle=bg; c.fillRect(0,0,S,S);
+    // Dunes pushed to edge
+    [[cx-70,cy+SAFE+55,210,65,'#CCA030'],[cx+85,cy+SAFE+70,195,55,'#BC9020'],[cx,cy+SAFE+100,240,50,'#B08018']].forEach(([dx,dy,rw,rh,col])=>{
+      c.fillStyle=col as string;
+      c.beginPath(); c.ellipse(dx as number,dy as number,rw as number,rh as number,0,Math.PI,0); c.closePath(); c.fill();
     });
-    // Cactus
-    [[cx-60,cy+20],[cx+70,cy+10]].forEach(([tx,ty]) => {
-      c.fillStyle = '#3A7840';
-      // Main stem
-      c.beginPath(); c.roundRect((tx as number)-10,(ty as number)-60,20,80,6); c.fill();
-      // Arms
-      c.beginPath(); c.roundRect((tx as number)-34,(ty as number)-30,26,10,4); c.fill();
-      c.beginPath(); c.roundRect((tx as number)-34,(ty as number)-44,10,22,4); c.fill();
-      c.beginPath(); c.roundRect((tx as number)+10,(ty as number)-38,26,10,4); c.fill();
-      c.beginPath(); c.roundRect((tx as number)+16,(ty as number)-52,10,22,4); c.fill();
-      // Ribs
-      c.strokeStyle='rgba(30,80,30,0.4)'; c.lineWidth=2;
-      for (let ri=0;ri<4;ri++){c.beginPath();c.moveTo((tx as number)-9,(ty as number)-55+ri*18);c.lineTo((tx as number)+9,(ty as number)-50+ri*18);c.stroke();}
+    // Cactus at corners, no eyes
+    [[cx-155,cy+30],[cx+148,cy+20]].forEach(([tx,ty])=>{
+      c.fillStyle='#2E6830';
+      c.beginPath(); c.roundRect((tx as number)-9,(ty as number)-55,18,72,5); c.fill();
+      c.beginPath(); c.roundRect((tx as number)-32,(ty as number)-26,24,9,4); c.fill();
+      c.beginPath(); c.roundRect((tx as number)-32,(ty as number)-40,9,20,4); c.fill();
+      c.beginPath(); c.roundRect((tx as number)+8,(ty as number)-34,24,9,4); c.fill();
+      c.beginPath(); c.roundRect((tx as number)+14,(ty as number)-48,9,20,4); c.fill();
     });
-    // Heat shimmer
-    const heat = c.createRadialGradient(cx, cy-40, 10, cx, cy-40, 180);
-    heat.addColorStop(0,'rgba(255,240,160,0.28)'); heat.addColorStop(1,'rgba(255,240,160,0)');
+    const heat=c.createRadialGradient(cx,cy-30,10,cx,cy-30,170);
+    heat.addColorStop(0,'rgba(255,238,150,0.26)'); heat.addColorStop(1,'rgba(255,238,150,0)');
     c.fillStyle=heat; c.fillRect(0,0,S,S);
   }
 
@@ -360,46 +331,47 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
         return (
-          <group position={[0, mat.height + 0.12, 0]}>
-            {/* Drop shadow */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]}>
-              <circleGeometry args={[0.50, 32]} />
-              <meshBasicMaterial color="#000000" transparent opacity={0.30} />
+          <group position={[0, mat.height + 0.14, 0]}>
+            {/* Soft drop shadow */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.09, 0]}>
+              <circleGeometry args={[0.60, 32]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.28} />
             </mesh>
-            {/* Disc body */}
+            {/* Disc body — larger, fully opaque, covers canvas centre zone */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.44, 0.46, 0.08, 32]} />
+              <cylinderGeometry args={[0.52, 0.54, 0.09, 36]} />
               <meshStandardMaterial
-                color="#F0DCA8"
-                roughness={0.52}
+                color="#EDD99A"
+                roughness={0.50}
                 metalness={0.0}
-                emissive="#3C2400"
-                emissiveIntensity={0.22}
+                emissive="#3C2800"
+                emissiveIntensity={0.18}
               />
             </mesh>
             {/* Carved rim */}
-            <mesh position={[0, 0.045, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.445, 0.026, 8, 32]} />
-              <meshStandardMaterial color="#5C3A14" roughness={0.72} />
+            <mesh position={[0, 0.050, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.525, 0.028, 8, 36]} />
+              <meshStandardMaterial color="#5A3412" roughness={0.75} />
             </mesh>
-            {/* Number */}
+            {/* Number — larger, bolder */}
             <Text
-              position={[0, 0.09, 0]}
+              position={[0, 0.095, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.36}
+              fontSize={0.40}
+              fontWeight={700}
               color={hot ? '#C41818' : '#2A1604'}
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.020}
+              outlineWidth={0.022}
               outlineColor={hot ? '#6A0000' : '#4A2C08'}
             >
               {String(hex.number)}
             </Text>
             {/* Probability dots */}
             <Text
-              position={[0, 0.09, 0.25]}
+              position={[0, 0.095, 0.28]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.080}
+              fontSize={0.082}
               color={hot ? '#C41818' : '#7A5830'}
               anchorX="center"
               anchorY="middle"
@@ -539,18 +511,27 @@ function Ocean() {
   useFrame(({ clock }) => {
     if (!meshRef.current) return;
     const mat = meshRef.current.material as THREE.MeshStandardMaterial;
-    const t = clock.elapsedTime * 0.10;
+    const t = clock.elapsedTime * 0.08;
     mat.color.setRGB(
-      0.04 + Math.sin(t)        * 0.012,
-      0.20 + Math.sin(t + 1.3)  * 0.022,
-      0.62 + Math.sin(t + 2.6)  * 0.032,
+      0.02 + Math.sin(t)       * 0.008,
+      0.16 + Math.sin(t+1.4)   * 0.018,
+      0.54 + Math.sin(t+2.7)   * 0.028,
     );
+    mat.emissiveIntensity = 0.06 + Math.sin(t*1.3) * 0.02;
   });
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-      <circleGeometry args={[12, 72]} />
-      <meshStandardMaterial color="#1565C0" roughness={0.14} metalness={0.14} />
-    </mesh>
+    <>
+      {/* Deep ocean base */}
+      <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]} receiveShadow>
+        <circleGeometry args={[13, 72]} />
+        <meshStandardMaterial color="#0D448A" roughness={0.12} metalness={0.22} emissive="#061840" emissiveIntensity={0.06} />
+      </mesh>
+      {/* Shallow coastal lighter ring near island edges */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.020, 0]}>
+        <ringGeometry args={[6.8, 8.8, 72]} />
+        <meshStandardMaterial color="#1565C0" roughness={0.18} metalness={0.15} transparent opacity={0.55} side={THREE.DoubleSide} />
+      </mesh>
+    </>
   );
 }
 
@@ -558,7 +539,20 @@ function Ocean() {
 // HARBORS — Port indicators on the ocean border
 // ============================================================================
 
+// Build a flat hexagonal harbour tile shape
+function createHarborHexShape(r: number): THREE.Shape {
+  const s = new THREE.Shape();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i;
+    const x = r * Math.cos(a), y = r * Math.sin(a);
+    i === 0 ? s.moveTo(x, y) : s.lineTo(x, y);
+  }
+  s.closePath();
+  return s;
+}
+
 function Harbors() {
+  const harborHex = useMemo(() => createHarborHexShape(0.62), []);
   return (
     <>
       {HARBOR_DEFS.map((harbor, i) => {
@@ -569,53 +563,48 @@ function Harbors() {
         const len = Math.sqrt(midX * midX + midZ * midZ);
         const nx = len > 0 ? midX / len : 0;
         const nz = len > 0 ? midZ / len : 0;
-        // Push outward from board centre into ocean
-        const px = midX + nx * 1.6;
-        const pz = midZ + nz * 1.6;
+        const px = midX + nx * 1.55;
+        const pz = midZ + nz * 1.55;
         const color = HARBOR_COLORS[harbor.type];
-        // Pier angle: box default extends along X, rotate to align with inward direction
         const pierAngle = -Math.atan2(nz, nx);
+        // Rotate hex tile so a flat edge faces toward the island
+        const hexRot = pierAngle + Math.PI / 6;
 
         return (
-          <group key={i} position={[px, 0.07, pz]}>
-            {/* Platform */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.56, 0.56, 0.06, 28]} />
-              <meshStandardMaterial color={color} roughness={0.58} metalness={0.10} emissive={color} emissiveIntensity={0.18} />
+          <group key={i} position={[px, 0.04, pz]}>
+            {/* Harbour frame tile body — flat hexagon */}
+            <mesh rotation={[-Math.PI / 2, hexRot, 0]} castShadow receiveShadow>
+              <extrudeGeometry args={[harborHex, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 }]} />
+              <meshStandardMaterial color={color} roughness={0.60} metalness={0.08} emissive={color} emissiveIntensity={0.14} />
             </mesh>
-            {/* Outer black ring */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.56, 0.038, 8, 28]} />
-              <meshStandardMaterial color="#0A0A0A" roughness={0.9} />
-            </mesh>
-            {/* Inner white ring accent */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
-              <ringGeometry args={[0.46, 0.50, 28]} />
-              <meshStandardMaterial color="#FFFFFF" transparent opacity={0.28} side={THREE.DoubleSide} />
-            </mesh>
-            {/* Label — large, bold, readable */}
+            {/* Label */}
             <Text
-              position={[0, 0.075, 0]}
+              position={[0, 0.09, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.18}
+              fontSize={0.16}
+              fontWeight={700}
               color="#FFFFFF"
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.022}
+              outlineWidth={0.020}
               outlineColor="#000000"
             >
               {harbor.label}
             </Text>
-            {/* Pier plank */}
-            <mesh position={[-nx * 0.90, -0.01, -nz * 0.90]} rotation={[0, pierAngle, 0]} castShadow>
-              <boxGeometry args={[0.13, 0.055, 1.80]} />
-              <meshStandardMaterial color="#5A3618" roughness={0.92} />
-            </mesh>
-            {/* Pier rail */}
-            <mesh position={[-nx * 0.90, 0.010, -nz * 0.90 - 0.05]} rotation={[0, pierAngle, 0]}>
-              <boxGeometry args={[0.09, 0.014, 1.70]} />
-              <meshStandardMaterial color="#7A4E28" roughness={0.88} />
-            </mesh>
+            {/* Two wooden pier planks extending toward the island */}
+            {[-0.10, 0.10].map((off, pi) => (
+              <mesh key={pi} position={[-nx*0.82 + Math.cos(pierAngle+Math.PI/2)*off, -0.005, -nz*0.82 + Math.sin(pierAngle+Math.PI/2)*off]} rotation={[0, pierAngle, 0]} castShadow>
+                <boxGeometry args={[0.08, 0.045, 1.50]} />
+                <meshStandardMaterial color="#4A2C10" roughness={0.94} />
+              </mesh>
+            ))}
+            {/* Cross-planks */}
+            {[-0.55, -0.10, 0.35].map((off, ci) => (
+              <mesh key={ci} position={[-nx*(0.82+off*0.3), 0.008, -nz*(0.82+off*0.3)]} rotation={[0, pierAngle+Math.PI/2, 0]}>
+                <boxGeometry args={[0.32, 0.03, 0.055]} />
+                <meshStandardMaterial color="#5C3A18" roughness={0.92} />
+              </mesh>
+            ))}
           </group>
         );
       })}
