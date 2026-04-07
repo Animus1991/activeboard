@@ -20,12 +20,12 @@ import {
 
 // PBR terrain materials — vivid physical board colours + emissive depth
 const TERRAIN_MATS: Record<string, { base: string; top: string; emissive: string; height: number }> = {
-  forest:    { base: '#1A5C1A', top: '#226622', emissive: '#061806', height: 0.14 },
-  hills:     { base: '#A83818', top: '#C04820', emissive: '#3A0E06', height: 0.22 },
-  pasture:   { base: '#4EA030', top: '#62B840', emissive: '#122C08', height: 0.08 },
-  fields:    { base: '#D4980A', top: '#ECB010', emissive: '#483200', height: 0.07 },
-  mountains: { base: '#505C64', top: '#687480', emissive: '#0C1418', height: 0.36 },
-  desert:    { base: '#C8A040', top: '#DDB855', emissive: '#362C0C', height: 0.05 },
+  forest:    { base: '#1A4E14', top: '#1E5A18', emissive: '#000000', height: 0.14 },
+  hills:     { base: '#8C2E10', top: '#A83418', emissive: '#000000', height: 0.22 },
+  pasture:   { base: '#3E8A24', top: '#4EA030', emissive: '#000000', height: 0.08 },
+  fields:    { base: '#B07A08', top: '#C88C0C', emissive: '#000000', height: 0.07 },
+  mountains: { base: '#424E58', top: '#566070', emissive: '#000000', height: 0.36 },
+  desert:    { base: '#A88030', top: '#C09840', emissive: '#000000', height: 0.05 },
 };
 
 const HEX_SIZE = 1.28;
@@ -218,6 +218,16 @@ function getTerrainTexture(terrain: string): THREE.CanvasTexture {
   return TERRAIN_TEXTURES[terrain]!;
 }
 
+// ============================================================================
+// SEA FRAME — ring-3 positions (all hex-neighbours of island boundary not on island)
+// Computed as: all (q,r) adjacent to any island hex but not in HEX_POSITIONS
+// ============================================================================
+const SEA_FRAME_POSITIONS: { q: number; r: number }[] = [
+  {q:-3,r:0},{q:-2,r:-1},{q:-1,r:-2},{q:0,r:-3},{q:1,r:-3},{q:2,r:-3},
+  {q:3,r:-3},{q:3,r:-2},{q:3,r:-1},{q:3,r:0},{q:2,r:1},{q:1,r:2},
+  {q:0,r:3},{q:-1,r:3},{q:-2,r:3},{q:-3,r:3},{q:-3,r:2},{q:-3,r:1},
+];
+
 // Standard Catan harbour definitions — 9 ports, positioned between adjacent border hexes
 const HARBOR_DEFS = [
   { hexA: {q:0,  r:-2}, hexB: {q:1,  r:-2}, type: '3:1',   label: '3:1'       },
@@ -308,10 +318,10 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         <extrudeGeometry args={[hexShape, extrudeSettings]} />
         <meshStandardMaterial
           color={mat.base}
-          roughness={0.88}
-          metalness={0.02}
-          emissive={hovered ? '#442200' : mat.emissive}
-          emissiveIntensity={hovered ? 0.5 : 0.35}
+          roughness={0.90}
+          metalness={0.01}
+          emissive={hovered ? '#2A1800' : '#000000'}
+          emissiveIntensity={hovered ? 0.35 : 0}
         />
       </mesh>
 
@@ -348,31 +358,25 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
                 emissiveIntensity={0.18}
               />
             </mesh>
-            {/* Carved rim */}
-            <mesh position={[0, 0.050, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.525, 0.028, 8, 36]} />
-              <meshStandardMaterial color="#5A3412" roughness={0.75} />
-            </mesh>
-            {/* Number — larger, bolder */}
+            {/* Number — centered, no rim, no face effect */}
             <Text
-              position={[0, 0.095, 0]}
+              position={[0, 0.10, -0.04]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.40}
-              fontWeight={700}
-              color={hot ? '#C41818' : '#2A1604'}
+              fontSize={hot ? 0.42 : 0.38}
+              color={hot ? '#B81010' : '#2A1604'}
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.022}
-              outlineColor={hot ? '#6A0000' : '#4A2C08'}
+              outlineWidth={0.024}
+              outlineColor={hot ? '#5A0000' : '#3A2008'}
             >
               {String(hex.number)}
             </Text>
-            {/* Probability dots */}
+            {/* Probability dots — directly below number on disc */}
             <Text
-              position={[0, 0.095, 0.28]}
+              position={[0, 0.10, 0.20]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.082}
-              color={hot ? '#C41818' : '#7A5830'}
+              fontSize={0.078}
+              color={hot ? '#B81010' : '#6A4820'}
               anchorX="center"
               anchorY="middle"
             >
@@ -551,8 +555,32 @@ function createHarborHexShape(r: number): THREE.Shape {
   return s;
 }
 
+function SeaFrame() {
+  const hexShape = useMemo(() => createHexShape(HEX_SIZE * 0.995), []);
+  const extSettings = useMemo(() => ({ depth: 0.06, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2 }), []);
+  return (
+    <>
+      {SEA_FRAME_POSITIONS.map((pos, i) => {
+        const [wx, , wz] = hexToWorld(pos.q, pos.r);
+        return (
+          <mesh key={i} position={[wx, -0.008, wz]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <extrudeGeometry args={[hexShape, extSettings]} />
+            <meshStandardMaterial
+              color="#0E3870"
+              roughness={0.28}
+              metalness={0.24}
+              emissive="#041428"
+              emissiveIntensity={0.18}
+            />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
 function Harbors() {
-  const harborHex = useMemo(() => createHarborHexShape(0.62), []);
+  const harborHex = useMemo(() => createHarborHexShape(0.68), []);
   return (
     <>
       {HARBOR_DEFS.map((harbor, i) => {
@@ -572,36 +600,43 @@ function Harbors() {
 
         return (
           <group key={i} position={[px, 0.04, pz]}>
-            {/* Harbour frame tile body — flat hexagon */}
+            {/* Harbour frame tile body — hex tile matching the board language */}
             <mesh rotation={[-Math.PI / 2, hexRot, 0]} castShadow receiveShadow>
-              <extrudeGeometry args={[harborHex, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 }]} />
-              <meshStandardMaterial color={color} roughness={0.60} metalness={0.08} emissive={color} emissiveIntensity={0.14} />
+              <extrudeGeometry args={[harborHex, { depth: 0.08, bevelEnabled: true, bevelThickness: 0.018, bevelSize: 0.018, bevelSegments: 2 }]} />
+              <meshStandardMaterial color={color} roughness={0.62} metalness={0.06} emissive="#000000" emissiveIntensity={0} />
             </mesh>
             {/* Label */}
             <Text
-              position={[0, 0.09, 0]}
+              position={[0, 0.10, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.16}
-              fontWeight={700}
+              fontSize={0.18}
               color="#FFFFFF"
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.020}
+              outlineWidth={0.025}
               outlineColor="#000000"
             >
               {harbor.label}
             </Text>
-            {/* Two wooden pier planks extending toward the island */}
-            {[-0.10, 0.10].map((off, pi) => (
-              <mesh key={pi} position={[-nx*0.82 + Math.cos(pierAngle+Math.PI/2)*off, -0.005, -nz*0.82 + Math.sin(pierAngle+Math.PI/2)*off]} rotation={[0, pierAngle, 0]} castShadow>
-                <boxGeometry args={[0.08, 0.045, 1.50]} />
+            {/* Two wooden pier planks — shorter so they don’t reach terrain */}
+            {[-0.09, 0.09].map((off, pi) => (
+              <mesh key={pi}
+                position={[
+                  -nx*0.60 + Math.cos(pierAngle+Math.PI/2)*off,
+                  -0.004,
+                  -nz*0.60 + Math.sin(pierAngle+Math.PI/2)*off
+                ]}
+                rotation={[0, pierAngle, 0]} castShadow>
+                <boxGeometry args={[0.07, 0.042, 0.85]} />
                 <meshStandardMaterial color="#4A2C10" roughness={0.94} />
               </mesh>
             ))}
             {/* Cross-planks */}
-            {[-0.55, -0.10, 0.35].map((off, ci) => (
-              <mesh key={ci} position={[-nx*(0.82+off*0.3), 0.008, -nz*(0.82+off*0.3)]} rotation={[0, pierAngle+Math.PI/2, 0]}>
-                <boxGeometry args={[0.32, 0.03, 0.055]} />
+            {[0.10, 0.40].map((frac, ci) => (
+              <mesh key={ci}
+                position={[-nx*(frac*0.85), 0.007, -nz*(frac*0.85)]}
+                rotation={[0, pierAngle+Math.PI/2, 0]}>
+                <boxGeometry args={[0.26, 0.028, 0.052]} />
                 <meshStandardMaterial color="#5C3A18" roughness={0.92} />
               </mesh>
             ))}
@@ -674,6 +709,9 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
           emissiveIntensity={0.20}
         />
       </mesh>
+
+      {/* Sea frame — ring of 18 sea tiles bordering the island */}
+      <SeaFrame />
 
       {/* Ocean */}
       <Ocean />
