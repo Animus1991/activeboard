@@ -7,8 +7,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Bot, Shuffle, Play, Map, Layers } from 'lucide-react';
 import type { AIDifficulty } from './useCatanAI';
-
-export type BoardSize = 'small' | 'standard' | 'large';
+import type { BoardSize } from './CatanEngine';
 
 export interface LobbyConfig {
   players: Array<{ name: string; color: string; isAI: boolean }>;
@@ -133,22 +132,28 @@ export default function CatanLobby({ onStart }: CatanLobbyProps) {
             <Layers className="w-4 h-4 text-emerald-400" /> Board Size
           </h2>
           <div className="grid grid-cols-3 gap-2">
-            {(['small', 'standard', 'large'] as BoardSize[]).map(s => (
+            {([
+              { key: 'standard' as BoardSize, label: 'Standard', sub: '19 hexes' },
+              { key: 'large' as BoardSize,    label: 'Large',    sub: '37 hexes' },
+              { key: 'xlarge' as BoardSize,   label: 'XL',       sub: '61 hexes' },
+            ]).map(s => (
               <button
-                key={s}
-                onClick={() => setBoardSize(s)}
-                className={`py-2 rounded-xl text-sm font-semibold capitalize transition-all border
-                  ${boardSize === s
+                key={s.key}
+                onClick={() => setBoardSize(s.key)}
+                className={`py-2 rounded-xl text-sm font-semibold transition-all border flex flex-col items-center
+                  ${boardSize === s.key
                     ? 'bg-emerald-600 border-emerald-400 text-white shadow-md shadow-emerald-900/50'
                     : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'}`}
               >
-                {s}
+                {s.label}
+                <span className="text-[9px] opacity-60 font-normal">{s.sub}</span>
               </button>
             ))}
           </div>
           {boardSize !== 'standard' && (
             <p className="text-xs text-amber-400 mt-2 text-center">
-              Non-standard board uses the standard 19-tile layout (large variants coming soon)
+              {boardSize === 'large' ? '5-6 player expansion board with constraint-solved number placement'
+                : 'Epic XL board — massive 61-hex map with 3 deserts'}
             </p>
           )}
         </section>

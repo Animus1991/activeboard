@@ -3,6 +3,9 @@
  * Complete implementation of Settlers of Catan rules
  */
 
+import { generateBoard, type BoardSize } from './CatanBoardGenerator';
+export type { BoardSize } from './CatanBoardGenerator';
+
 // ============================================================================
 // TYPES & INTERFACES
 // ============================================================================
@@ -321,8 +324,14 @@ function generateDevelopmentCardDeck(): DevelopmentCardType[] {
 // GAME INITIALIZATION
 // ============================================================================
 
-export function createInitialGameState(playerNames: string[]): GameState {
-  const hexTiles = generateHexTiles();
+export function createInitialGameState(playerNames: string[], boardSize: BoardSize = 'standard'): GameState {
+  let hexTiles: HexTile[];
+  if (boardSize === 'standard') {
+    hexTiles = generateHexTiles();
+  } else {
+    const board = generateBoard(boardSize);
+    hexTiles = board.hexTiles;
+  }
   const { vertices: rawVertices, edges } = generateVerticesAndEdges(hexTiles);
   const vertices = assignHarbors(hexTiles, rawVertices);
   const robberHex = hexTiles.find(h => h.terrain === 'desert')!;

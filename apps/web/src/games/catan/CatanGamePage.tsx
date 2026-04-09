@@ -703,7 +703,8 @@ export default function CatanGamePage() {
   const handleLobbyStart = useCallback((config: LobbyConfig) => {
     const playerNames = config.players.map(p => p.name);
     const initialState = createInitialGameState(
-      mp.isMultiplayer && mp.playerNames.length > 0 ? mp.playerNames : playerNames
+      mp.isMultiplayer && mp.playerNames.length > 0 ? mp.playerNames : playerNames,
+      config.boardSize,
     );
     // Override player colors from lobby config
     const stateWithColors = {
