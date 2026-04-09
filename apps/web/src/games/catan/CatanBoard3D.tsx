@@ -10,6 +10,7 @@ import { OrbitControls, Text, PerspectiveCamera, Environment, ContactShadows } f
 import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
 import { useKeyboardControls } from './CatanHUDFeatures';
 import { XR, createXRStore } from '@react-three/xr';
+import { Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
 
 import {
@@ -1454,27 +1455,61 @@ function DiePips({ value, faceNormal }: { value: number; faceNormal: [number, nu
   );
 }
 
-function Die3D({ value, position, rotSeed }: { value: number; position: [number, number, number]; rotSeed: number }) {
-  const groupRef = useRef<THREE.Group>(null);
+// Rotation quaternions to put each value on the +Y face of a standard die
+const VALUE_TO_ROTATION: Record<number, [number, number, number, number]> = {
+  1: [0, 0, -0.7071, 0.7071],   // +X up → value 1 top
+  2: [0.7071, 0, 0, 0.7071],    // +Z up → value 2 top
+  3: [0, 0, 0, 1],              // +Y up → value 3 top (identity)
+  4: [1, 0, 0, 0],              // -Y up → value 4 top (180° around X)
+  5: [-0.7071, 0, 0, 0.7071],   // -Z up → value 5 top
+  6: [0, 0, 0.7071, 0.7071],    // -X up → value 6 top
+};
 
-  // Gentle idle wobble
-  useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    const t = clock.elapsedTime + rotSeed;
-    groupRef.current.rotation.y = Math.sin(t * 0.3) * 0.02 + rotSeed;
-    groupRef.current.position.y = position[1] + Math.sin(t * 0.5) * 0.003;
+function PhysicsDie({ value, startPos, seed }: { value: number; startPos: [number, number, number]; seed: number }) {
+  const bodyRef = useRef<RapierRigidBody>(null);
+  const settled = useRef(false);
+  const timer = useRef(0);
+
+  useFrame((_, delta) => {
+    if (!bodyRef.current || settled.current) return;
+    timer.current += delta;
+
+    // After 2s, force settle to correct rotation
+    if (timer.current > 2.0) {
+      const quat = VALUE_TO_ROTATION[value] || VALUE_TO_ROTATION[3];
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setRotation({ x: quat[0], y: quat[1], z: quat[2], w: quat[3] }, true);
+      settled.current = true;
+      return;
+    }
+
+    // Check if velocity is near zero → snap
+    const vel = bodyRef.current.linvel();
+    const speed = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
+    if (timer.current > 0.8 && speed < 0.05) {
+      const quat = VALUE_TO_ROTATION[value] || VALUE_TO_ROTATION[3];
+      bodyRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      bodyRef.current.setRotation({ x: quat[0], y: quat[1], z: quat[2], w: quat[3] }, true);
+      settled.current = true;
+    }
   });
 
-  // Standard die: value on TOP face (+Y). Opposite faces sum to 7.
-  // We show pips on all 6 faces with correct standard die layout
   const topVal = value;
   const bottomVal = 7 - value;
-  // Standard die: 1 front, 2 left, 3 top → rotations to get 'value' on top
-  // For simplicity we show pips on top (+Y) and front (+Z) only. The die body implies the rest.
 
   return (
-    <group ref={groupRef} position={position}>
-      {/* Die body — rounded ivory cube */}
+    <RigidBody
+      ref={bodyRef}
+      position={startPos}
+      rotation={[seed * 2.1, seed * 3.7, seed * 1.3]}
+      linearVelocity={[(Math.random() - 0.5) * 1.5, -2, (Math.random() - 0.5) * 1.5]}
+      angularVelocity={[(Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15]}
+      restitution={0.3}
+      friction={0.8}
+      colliders="cuboid"
+    >
       <mesh castShadow receiveShadow>
         <boxGeometry args={[0.24, 0.24, 0.24]} />
         <meshStandardMaterial
@@ -1485,32 +1520,37 @@ function Die3D({ value, position, rotSeed }: { value: number; position: [number,
           emissiveIntensity={0.03}
         />
       </mesh>
-      {/* Edge bevel illusion — slightly larger transparent dark box */}
-      <mesh>
-        <boxGeometry args={[0.25, 0.25, 0.25]} />
-        <meshStandardMaterial color="#C8B898" roughness={0.8} metalness={0.0} transparent opacity={0.08} />
-      </mesh>
-      {/* Pips on top face (+Y) */}
       <DiePips value={topVal} faceNormal={[0, 1, 0]} />
-      {/* Pips on front face (+Z) for depth — use a plausible value */}
       <DiePips value={Math.max(1, Math.min(6, (topVal + 1) % 6 + 1))} faceNormal={[0, 0, 1]} />
-      {/* Pips on right face (+X) */}
       <DiePips value={bottomVal > 3 ? bottomVal - 3 : bottomVal + 2} faceNormal={[1, 0, 0]} />
-    </group>
+    </RigidBody>
   );
 }
 
 function Dice3DPair({ diceRoll }: { diceRoll: [number, number] | null }) {
   if (!diceRoll) return null;
+
+  // Use a key based on values to re-trigger physics on each new roll
+  const rollKey = `${diceRoll[0]}-${diceRoll[1]}-${Date.now()}`;
+
   return (
-    <group position={[3.8, 0.20, 3.8]}>
+    <group position={[3.8, 0, 3.8]}>
+      {/* Invisible floor for dice to land on */}
+      <Physics gravity={[0, -9.81, 0]} key={rollKey}>
+        <RigidBody type="fixed" position={[0, -0.02, 0]}>
+          <mesh>
+            <boxGeometry args={[2, 0.04, 2]} />
+            <meshBasicMaterial visible={false} />
+          </mesh>
+        </RigidBody>
+        <PhysicsDie value={diceRoll[0]} startPos={[-0.2, 1.8, 0]} seed={0.3} />
+        <PhysicsDie value={diceRoll[1]} startPos={[0.2, 2.1, 0.06]} seed={1.7} />
+      </Physics>
       {/* Contact shadow */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
         <circleGeometry args={[0.50, 24]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.25} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.2} />
       </mesh>
-      <Die3D value={diceRoll[0]} position={[-0.18, 0, 0]} rotSeed={0.3} />
-      <Die3D value={diceRoll[1]} position={[0.20, 0, 0.06]} rotSeed={1.7} />
     </group>
   );
 }
