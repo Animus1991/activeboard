@@ -440,11 +440,11 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Type Safety** | ⭐⭐⭐⭐⭐ Formal branded types + Vec3/Transform3D | ✅ Enhanced |
 | **3D Terrain** | ⭐⭐⭐⭐⭐ Painted PBR + 3D props (trees, mountains, sheep, wheat, cacti) | ✅ ABAS → TF |
 | **Lighting** | ⭐⭐⭐⭐⭐ 7-light cinematic + HDR Environment | ✅ Enhanced |
-| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + **DoF** + Vignette + SMAA | ✅ ABAS → TF |
+| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + **DoF** + Vignette + **Noise** + SMAA | ✅ ABAS → TF |
 | **Physics** | ⭐⭐⭐⭐⭐ Rapier RigidBody dice — tumble + auto-settle + correct face snap | ✅ ABAS → TF |
 | **Shaders** | ⭐⭐⭐⭐ Wind + water via onBeforeCompile | ✅ ABAS → TF |
 | **AI Quality** | ⭐⭐⭐⭐⭐ Multi-action + trade proposals + trade eval | ✅ ABAS → TF |
-| **UI Features** | ⭐⭐⭐⭐⭐ Tutorial, Rules, Chat, Dice History, Save/Load, Replay, Zoom, WASD, Trade Rating, **Leaderboard**, **TX Log**, **VP Celebration**, **Hand Limit Warning** | ✅ Enhanced |
+| **UI Features** | ⭐⭐⭐⭐⭐ Tutorial, Rules, Chat, Dice History, Save/Load, Replay, Zoom, WASD, Trade Rating, **Leaderboard**, **TX Log**, **VP Celebration**, **Hand Limit Warning**, **Avatar Bar**, **Settings Panel**, **Layout Mode**, **Sound Mute** | ✅ Enhanced |
 | **Multiplayer** | ⭐⭐⭐⭐⭐ Liveblocks + WebRTC telepresence | ✅ TF original |
 | **Projections** | ⭐⭐⭐⭐⭐ 5 projection types | ✅ TF original |
 | **Testing** | ⭐⭐⭐ Framework exists | ✅ TF original |
@@ -454,8 +454,9 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates + **3D Video Panels** (CRT scanline, LIVE indicator, Html-in-scene) | ✅ Enhanced |
 | **VR/XR** | ⭐⭐⭐⭐⭐ XR store + VR entry button + immersive-ready | ✅ ABAS → TF |
 | **Sound System** | ⭐⭐⭐⭐⭐ 10 SFX + spatial audio infra + PositionalAudio anchors | ✅ Enhanced |
+| **Player Cards** | ⭐⭐⭐⭐⭐ ABAS-style resource emoji grid + building piece counts + VP breakdown | ✅ Enhanced |
 | **Token Quality** | ⭐⭐⭐⭐⭐ Premium coins | ✅ TF original |
 | **Table Surface** | ⭐⭐⭐⭐⭐ Walnut + felt + contact shadows | ✅ Enhanced |
 | **Canvas Overlay** | ⭐⭐⭐⭐ Painterly noise texture overlay | ✅ ABAS → TF |
 
-**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing + physics dice + shaders + AI + HUD features + resource animations + 3D video presence panels + spatial presence + XR support + canvas overlay.**
+**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing (Bloom+DoF+Vignette+Noise+SMAA) + physics dice + shaders + AI + HUD features + avatar bar + ABAS-style player cards + settings panel + layout mode + sound controls + resource animations + 3D video presence panels + spatial presence + XR support + canvas overlay.**

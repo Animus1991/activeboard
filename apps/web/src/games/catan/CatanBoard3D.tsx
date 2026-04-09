@@ -7,7 +7,7 @@
 import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, SMAA, Noise } from '@react-three/postprocessing';
 import { useKeyboardControls } from './CatanHUDFeatures';
 import { XR, createXRStore } from '@react-three/xr';
 import { Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
@@ -1853,6 +1853,7 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
         />
         <DepthOfField focusDistance={0.02} focalLength={0.04} bokehScale={2} height={480} />
         <Vignette eskil={false} offset={0.15} darkness={0.65} />
+        <Noise premultiply opacity={0.015} />
         <SMAA />
       </EffectComposer>
 

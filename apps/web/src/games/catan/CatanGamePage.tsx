@@ -43,7 +43,8 @@ import {
   Crown, Sword, Map,
   ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
   BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered,
-  Trophy, AlertTriangle, ArrowUpDown
+  Trophy, AlertTriangle, ArrowUpDown,
+  Move, Settings, Volume2, VolumeX
 } from 'lucide-react';
 import {
   type GameState,
@@ -135,6 +136,14 @@ const ResourceColors: Record<ResourceType, string> = {
   ore: 'bg-slate-500',
 };
 
+const ResourceEmoji: Record<ResourceType, string> = {
+  wood: '🪵',
+  brick: '🧱',
+  sheep: '🐑',
+  wheat: '🌾',
+  ore: '⛏️',
+};
+
 
 // ============================================================================
 // PLAYER PANEL
@@ -187,17 +196,27 @@ function PlayerPanel({ player, isCurrentPlayer, isAI, currentTurn = 0, gameState
         </div>
       </div>
 
-      {/* Resources */}
+      {/* Resources — ABAS-style grid with emoji icons + count */}
       <div className="grid grid-cols-5 gap-1 mb-2">
         {(Object.entries(player.resources) as [ResourceType, number][]).map(([resource, count]) => (
           <div 
             key={resource}
-            className={`${ResourceColors[resource]} rounded p-1 text-center text-white text-xs font-bold`}
-            title={resource}
+            className={`${ResourceColors[resource]} rounded-lg p-1 text-center transition-transform ${count > 0 ? 'ring-1 ring-white/20 scale-100' : 'opacity-60 scale-95'}`}
+            title={`${resource}: ${count}`}
           >
-            {count}
+            <div className="text-[10px] leading-none mb-0.5">{ResourceEmoji[resource]}</div>
+            <div className="text-white text-xs font-extrabold">{count}</div>
           </div>
         ))}
+      </div>
+
+      {/* Building pieces remaining + stats */}
+      <div className="flex items-center gap-2 text-[9px] text-slate-400 mb-1.5 flex-wrap">
+        <span title="Settlements built / remaining">🏠 {5 - player.settlements}/{5}</span>
+        <span title="Cities built / remaining">🏙 {4 - player.cities}/{4}</span>
+        <span title="Roads built / remaining">🛤 {15 - player.roads}/{15}</span>
+        <span title="Knights played">⚔ {player.playedKnights}</span>
+        <span title="Dev cards held">📜 {player.developmentCards.length}</span>
       </div>
 
       {/* Badges */}
@@ -677,6 +696,9 @@ export default function CatanGamePage() {
   const [showTxLog, setShowTxLog] = useState(false);
   const [vpCelebration, setVpCelebration] = useState<{ player: string; vp: number } | null>(null);
   const prevVPs = useRef<Record<string, number>>({});
+  const [layoutMode, setLayoutMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
 
   // ── VP celebration detection ───────────────────────────────────────────────
   useEffect(() => {
@@ -1041,6 +1063,39 @@ export default function CatanGamePage() {
             </div>
           </div>
 
+          {/* Player avatar bar — circular portraits (like ABAS top bar) */}
+          <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 bg-black/60 backdrop-blur-md rounded-xl px-2 sm:px-3 py-1.5 border border-white/10">
+            {gameState.players.map((p, i) => {
+              const isActive = i === gameState.currentPlayerIndex;
+              return (
+                <div key={p.id} className="relative group" title={`${p.name} · ${p.victoryPoints} VP`}>
+                  <img
+                    src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(p.name)}&backgroundColor=${p.color.replace('#', '')}`}
+                    alt={p.name}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 transition-all ${
+                      isActive ? 'scale-110 ring-2 ring-yellow-400/70' : 'opacity-75 hover:opacity-100'
+                    }`}
+                    style={{ borderColor: p.color }}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  {isActive && (
+                    <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.7)]" />
+                  )}
+                  {aiPlayerIds.includes(p.id) && (
+                    <Bot className="w-3 h-3 text-violet-300 absolute -top-0.5 -right-0.5 bg-slate-900 rounded-full p-px" />
+                  )}
+                  {/* Hover tooltip */}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block z-50 pointer-events-none">
+                    <div className="bg-black/90 rounded-lg px-2 py-1 border border-white/15 text-center whitespace-nowrap">
+                      <div className="text-[10px] font-bold text-white">{p.name}</div>
+                      <div className="text-[9px] font-bold" style={{ color: p.color }}>{p.victoryPoints} VP</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Camera mode switcher — hidden on small phones, visible from sm */}
           <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2 sm:px-3 py-1 sm:py-1.5 border border-white/10 hidden xs:flex items-center gap-0.5 sm:gap-1">
             {(['tactical', 'table', 'inspect', 'cinematic'] as CameraMode[]).map(mode => (
@@ -1142,6 +1197,28 @@ export default function CatanGamePage() {
               className={`p-1.5 rounded-lg transition-colors ${showTxLog ? 'text-pink-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <ArrowUpDown className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-white/15 mx-0.5" />
+            <button
+              onClick={() => setLayoutMode(v => !v)}
+              title="Layout Mode — drag panels in 3D space"
+              className={`p-1.5 rounded-lg transition-colors ${layoutMode ? 'text-teal-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <Move className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setSoundMuted(v => !v)}
+              title={soundMuted ? 'Unmute sounds' : 'Mute sounds'}
+              className={`p-1.5 rounded-lg transition-colors ${soundMuted ? 'text-red-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setShowSettings(v => !v)}
+              title="Settings"
+              className={`p-1.5 rounded-lg transition-colors ${showSettings ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <Settings className="w-4 h-4" />
             </button>
           </div>
 
@@ -1460,6 +1537,82 @@ export default function CatanGamePage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* === LAYOUT MODE INDICATOR === */}
+      {layoutMode && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+          <div className="bg-teal-900/85 backdrop-blur-md rounded-xl px-5 py-2 border border-teal-500/40 flex items-center gap-3 shadow-lg">
+            <Move className="w-4 h-4 text-teal-300" />
+            <span className="text-teal-200 text-xs font-semibold">Layout Mode Active — drag presence panels in 3D space</span>
+            <button
+              onClick={() => setLayoutMode(false)}
+              className="text-teal-400 hover:text-white text-xs underline ml-2"
+            >
+              Exit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* === SETTINGS PANEL === */}
+      {showSettings && (
+        <div className="absolute right-3 top-14 z-50 pointer-events-auto">
+          <div className="bg-black/90 backdrop-blur-lg rounded-2xl border border-white/15 shadow-2xl px-5 py-4 w-72">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Settings className="w-4 h-4 text-slate-400" />
+                Game Settings
+              </h3>
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div className="space-y-3">
+              {/* Sound toggle */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/70">Sound Effects</span>
+                <button
+                  onClick={() => setSoundMuted(v => !v)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    soundMuted ? 'bg-red-600/30 text-red-300 border border-red-500/30' : 'bg-green-600/30 text-green-300 border border-green-500/30'
+                  }`}
+                >
+                  {soundMuted ? 'Muted' : 'On'}
+                </button>
+              </div>
+              {/* Layout mode */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/70">Layout Mode</span>
+                <button
+                  onClick={() => setLayoutMode(v => !v)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    layoutMode ? 'bg-teal-600/30 text-teal-300 border border-teal-500/30' : 'bg-slate-600/30 text-slate-300 border border-slate-500/30'
+                  }`}
+                >
+                  {layoutMode ? 'Active' : 'Off'}
+                </button>
+              </div>
+              {/* Camera mode */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/70">Camera</span>
+                <select
+                  value={cameraMode}
+                  onChange={e => setCameraMode(e.target.value as CameraMode)}
+                  className="bg-slate-800 text-white text-xs rounded-lg px-2 py-1 border border-white/15"
+                >
+                  {(['tactical', 'table', 'inspect', 'cinematic'] as CameraMode[]).map(m => (
+                    <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Board info */}
+              <div className="border-t border-white/10 pt-2 mt-2 text-[10px] text-white/30 space-y-0.5">
+                <div>Players: {gameState.players.length} · Turn: {gameState.turn}</div>
+                <div>Dev cards remaining: {gameState.developmentCardDeck.length}</div>
+                <div>Phase: {gameState.phase}</div>
+              </div>
+            </div>
           </div>
         </div>
       )}
