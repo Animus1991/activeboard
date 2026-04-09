@@ -12,7 +12,8 @@ const CatanTradePanel = lazy(() => import('./CatanTradePanel'));
 import { Resource3DIcon } from './CatanResourceFlow';
 
 type CameraMode = 'tactical' | 'table' | 'inspect' | 'cinematic';
-import CatanPresence from './CatanPresence';
+import CatanPresence, { type PresencePeerInfo } from './CatanPresence';
+import { type Presence3DPlayer } from './CatanPresence3D';
 import CatanDice from './CatanDice';
 import {
   computeUIProjection,
@@ -700,6 +701,44 @@ export default function CatanGamePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
 
+  // ── 3D Presence bridge — WebRTC streams ↔ 3D video panels ──────────────
+  const [presencePlayers, setPresencePlayers] = useState<Presence3DPlayer[]>([]);
+
+  const handlePeersChange = useCallback((localStream: MediaStream | null, peerInfos: PresencePeerInfo[]) => {
+    // Build Presence3DPlayer[] from real WebRTC streams
+    const presence3D: Presence3DPlayer[] = gameState.players.map(p => {
+      const peerInfo = peerInfos.find(pi => pi.id === p.id);
+      const isLocal = p.id === (mp.playerId ?? 'local');
+      return {
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        stream: isLocal ? localStream : (peerInfo?.stream ?? null),
+        audioEnabled: isLocal ? true : (peerInfo?.audioEnabled ?? false),
+        videoEnabled: isLocal ? true : (peerInfo?.videoEnabled ?? false),
+        isActive: gameState.currentPlayerIndex === gameState.players.indexOf(p),
+        victoryPoints: p.victoryPoints,
+      };
+    });
+    setPresencePlayers(presence3D);
+  }, [gameState.players, gameState.currentPlayerIndex, mp.playerId]);
+
+  // Solo mode — still show 3D panels (no streams, avatar placeholder) for all players
+  useEffect(() => {
+    if (mp.isMultiplayer) return; // multiplayer handled by onPeersChange
+    const soloPresence: Presence3DPlayer[] = gameState.players.map((p, i) => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      stream: null,
+      audioEnabled: false,
+      videoEnabled: false,
+      isActive: i === gameState.currentPlayerIndex,
+      victoryPoints: p.victoryPoints,
+    }));
+    setPresencePlayers(soloPresence);
+  }, [mp.isMultiplayer, gameState.players, gameState.currentPlayerIndex]);
+
   // ── VP celebration detection ───────────────────────────────────────────────
   useEffect(() => {
     for (const p of gameState.players) {
@@ -1040,6 +1079,7 @@ export default function CatanGamePage() {
       <div className="absolute inset-0 z-0">
         <CatanBoard3D
           gameState={gameState}
+          presencePlayers={presencePlayers}
           onHexClick={handleHexClick}
           onVertexClick={showVertexTargets ? handleVertexClick : undefined}
           onEdgeClick={showEdgeTargets ? handleEdgeClick : undefined}
@@ -1388,6 +1428,7 @@ export default function CatanGamePage() {
             presenceSendRef.current = handler as unknown as (msg: unknown) => void;
             return () => { presenceSendRef.current = null; };
           }}
+          onPeersChange={handlePeersChange}
         />
       )}
 

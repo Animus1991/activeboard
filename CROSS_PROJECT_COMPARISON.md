@@ -451,7 +451,7 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Documentation** | ⭐⭐⭐⭐⭐ Extensive + FeatureMatrixRow tracker | ✅ Enhanced |
 | **Board Generation** | ⭐⭐⭐⭐⭐ Variable sizes + constraint solver + randomization | ✅ ABAS → TF |
 | **Resource Animations** | ⭐⭐⭐⭐⭐ 3D flight arcs + mini 3D HUD icons | ✅ ABAS → TF |
-| **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates + **3D Video Panels** (CRT scanline, LIVE indicator, Html-in-scene) | ✅ Enhanced |
+| **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates + **3D Video Panels** (CRT scanline, LIVE indicator, DiceBear avatars, WebRTC↔3D bridge, solo-mode panels) | ✅ Enhanced |
 | **VR/XR** | ⭐⭐⭐⭐⭐ XR store + VR entry button + immersive-ready | ✅ ABAS → TF |
 | **Sound System** | ⭐⭐⭐⭐⭐ 10 SFX + spatial audio infra + PositionalAudio anchors | ✅ Enhanced |
 | **Player Cards** | ⭐⭐⭐⭐⭐ ABAS-style resource emoji grid + building piece counts + VP breakdown | ✅ Enhanced |
@@ -459,4 +459,4 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Table Surface** | ⭐⭐⭐⭐⭐ Walnut + felt + contact shadows | ✅ Enhanced |
 | **Canvas Overlay** | ⭐⭐⭐⭐ Painterly noise texture overlay | ✅ ABAS → TF |
 
-**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing (Bloom+DoF+Vignette+Noise+SMAA) + physics dice + shaders + AI + HUD features + avatar bar + ABAS-style player cards + settings panel + layout mode + sound controls + resource animations + 3D video presence panels + spatial presence + XR support + canvas overlay.**
+**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing (Bloom+DoF+Vignette+Noise+SMAA) + physics dice + shaders + AI + HUD features + avatar bar + ABAS-style player cards + settings panel + layout mode + sound controls + resource animations + 3D video presence panels (WebRTC↔3D bridge + DiceBear fallback + solo-mode) + spatial presence + XR support + canvas overlay.**

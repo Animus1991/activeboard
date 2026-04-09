@@ -214,14 +214,26 @@ function VideoPanel3D({ player, position, index }: VideoPanel3DProps) {
           <div style={{
             width: '100%',
             height: '100%',
-            background: '#0a0a1a',
+            background: `linear-gradient(135deg, #0a0a1a 0%, ${player.color}22 100%)`,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#334',
-            fontSize: 32,
+            gap: 4,
           }}>
-            📷
+            <img
+              src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(player.name)}&backgroundColor=${player.color.replace('#', '')}`}
+              alt={player.name}
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                border: `2px solid ${player.color}`,
+                boxShadow: `0 0 12px ${player.color}44`,
+              }}
+            />
+            {/* Scanline overlay on avatar too */}
+            <div style={SCANLINE_STYLE} />
           </div>
         )}
 
@@ -255,7 +267,10 @@ function VideoPanel3D({ player, position, index }: VideoPanel3DProps) {
             {player.name}
           </span>
           {!player.audioEnabled && (
-            <span style={{ fontSize: 10, color: '#f44' }}>🔇</span>
+            <span style={{ fontSize: 10, color: '#f44' }} title="Muted">🔇</span>
+          )}
+          {!player.videoEnabled && (
+            <span style={{ fontSize: 10, color: '#f44' }} title="Camera off">📷</span>
           )}
           <span style={{
             marginLeft: 'auto',

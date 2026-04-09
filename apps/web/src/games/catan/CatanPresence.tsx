@@ -97,6 +97,16 @@ const RTC_CONFIG: RTCConfiguration = {
 // MAIN COMPONENT
 // ============================================================================
 
+/** Exposed peer info for bridging to 3D presence panels */
+export interface PresencePeerInfo {
+  id: string;
+  name: string;
+  color: string;
+  stream: MediaStream | null;
+  audioEnabled: boolean;
+  videoEnabled: boolean;
+}
+
 export interface CatanPresenceProps {
   localPlayerId: string;
   players: PresencePlayer[];
@@ -104,9 +114,11 @@ export interface CatanPresenceProps {
   sendSignal: (msg: SignalMessage) => void;
   /** Subscribe to incoming signal messages */
   onSignal: (handler: (msg: SignalMessage) => void) => () => void;
+  /** Called whenever peer state changes — bridges WebRTC streams to 3D presence */
+  onPeersChange?: (localStream: MediaStream | null, peers: PresencePeerInfo[]) => void;
 }
 
-export function CatanPresence({ localPlayerId, players, sendSignal, onSignal }: CatanPresenceProps) {
+export function CatanPresence({ localPlayerId, players, sendSignal, onSignal, onPeersChange }: CatanPresenceProps) {
   const local = useLocalMedia();
   const [peers, setPeers] = useState<Map<string, PeerState>>(new Map());
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -252,6 +264,20 @@ export function CatanPresence({ localPlayerId, players, sendSignal, onSignal }: 
 
   // Cleanup on unmount
   useEffect(() => () => { pcsRef.current.forEach(pc => pc.close()); }, []);
+
+  // ── Bridge peer state to parent for 3D rendering ───────────────────────
+  useEffect(() => {
+    if (!onPeersChange) return;
+    const peerInfos: PresencePeerInfo[] = Array.from(peers.values()).map(p => ({
+      id: p.playerId,
+      name: p.playerName,
+      color: p.playerColor,
+      stream: p.stream,
+      audioEnabled: p.audioEnabled,
+      videoEnabled: p.videoEnabled,
+    }));
+    onPeersChange(local.stream, peerInfos);
+  }, [peers, local.stream, onPeersChange]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   const peerList = Array.from(peers.values());
