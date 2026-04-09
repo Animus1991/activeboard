@@ -450,4 +450,22 @@ export const FEATURE_MATRIX: Record<string, FeatureMatrixRow> = {
   aiMultiAction:    { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
   aiTradeProposal:  { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
   aiPreRollKnight:  { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
+  // Telepresence / Immersion
+  presence3D:       { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  avatarBar:        { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  settingsPanel:    { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  layoutMode:       { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  soundMute:        { fe: true,  event: false, reducer: false, projection: false, render: false, sound: true,  ai: false },
+  // Game feedback
+  vpCelebration:    { fe: true,  event: false, reducer: false, projection: true,  render: false, sound: false, ai: false },
+  handLimitWarning: { fe: true,  event: false, reducer: false, projection: true,  render: false, sound: false, ai: false },
+  leaderboard:      { fe: true,  event: false, reducer: false, projection: true,  render: false, sound: false, ai: false },
+  txLog:            { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  playerCardGrid:   { fe: true,  event: false, reducer: false, projection: true,  render: false, sound: false, ai: false },
+  // Post-processing extras
+  noiseFX:          { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  contactShadows:   { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  // XR
+  vrXrSupport:      { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  physicsDice:      { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: true,  ai: false },
 };

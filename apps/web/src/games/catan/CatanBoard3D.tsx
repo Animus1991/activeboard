@@ -118,7 +118,7 @@ function _applyHexVignette(c: CanvasRenderingContext2D, cx: number, cy: number, 
 }
 
 function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
-  const S = 768;
+  const S = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = S; canvas.height = S;
   const c = canvas.getContext('2d')!;
@@ -363,7 +363,10 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
   c.restore();
   const tex = new THREE.CanvasTexture(canvas);
   tex.needsUpdate = true;
-  tex.anisotropy = 4;
+  tex.anisotropy = 16;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
   return tex;
 }
 
@@ -877,7 +880,7 @@ const _proceduralTextures: Record<string, THREE.CanvasTexture> = {};
 function getProceduralTexture(type: 'wood' | 'stone' | 'weatheredWood'): THREE.CanvasTexture {
   if (_proceduralTextures[type]) return _proceduralTextures[type];
   
-  const S = 256;
+  const S = 512;
   const canvas = document.createElement('canvas');
   canvas.width = S; canvas.height = S;
   const ctx = canvas.getContext('2d')!;
@@ -911,6 +914,10 @@ function getProceduralTexture(type: 'wood' | 'stone' | 'weatheredWood'): THREE.C
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 16;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
   _proceduralTextures[type] = tex;
   return tex;
 }
@@ -1844,16 +1851,16 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
       />
 
       {/* Post-processing effects pipeline */}
-      <EffectComposer multisampling={0}>
+      <EffectComposer multisampling={8}>
         <Bloom
-          luminanceThreshold={0.85}
-          luminanceSmoothing={0.5}
-          intensity={0.25}
+          luminanceThreshold={0.9}
+          luminanceSmoothing={0.4}
+          intensity={0.18}
           mipmapBlur
         />
-        <DepthOfField focusDistance={0.02} focalLength={0.04} bokehScale={2} height={480} />
-        <Vignette eskil={false} offset={0.15} darkness={0.65} />
-        <Noise premultiply opacity={0.015} />
+        <DepthOfField focusDistance={0.015} focalLength={0.02} bokehScale={1.2} height={1080} />
+        <Vignette eskil={false} offset={0.2} darkness={0.5} />
+        <Noise premultiply opacity={0.006} />
         <SMAA />
       </EffectComposer>
 
@@ -2018,8 +2025,10 @@ export default function CatanBoard3D({
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.25,
           outputColorSpace: THREE.SRGBColorSpace,
+          powerPreference: 'high-performance',
+          precision: 'highp',
         }}
-        dpr={[1, 2.5]}
+        dpr={[1.5, 2]}
       >
         <XR store={xrStore}>
           <Suspense fallback={null}>
@@ -2036,7 +2045,7 @@ export default function CatanBoard3D({
 
       {/* Canvas overlay — painterly texture feel (like ABAS) */}
       <div
-        className="absolute inset-0 pointer-events-none z-10 opacity-[0.018] mix-blend-overlay"
+        className="absolute inset-0 pointer-events-none z-10 opacity-[0.008] mix-blend-overlay"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
           backgroundSize: '256px 256px',

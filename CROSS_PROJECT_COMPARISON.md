@@ -440,7 +440,8 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Type Safety** | ⭐⭐⭐⭐⭐ Formal branded types + Vec3/Transform3D | ✅ Enhanced |
 | **3D Terrain** | ⭐⭐⭐⭐⭐ Painted PBR + 3D props (trees, mountains, sheep, wheat, cacti) | ✅ ABAS → TF |
 | **Lighting** | ⭐⭐⭐⭐⭐ 7-light cinematic + HDR Environment | ✅ Enhanced |
-| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + **DoF** + Vignette + **Noise** + SMAA | ✅ ABAS → TF |
+| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + DoF (1080p) + Vignette + Noise + SMAA + MSAA×8 | ✅ ABAS → TF |
+| **Render Quality** | ⭐⭐⭐⭐⭐ DPR 1.5–2, highp precision, 1024px terrain textures, AF×16, high-perf GPU | ✅ Enhanced |
 | **Physics** | ⭐⭐⭐⭐⭐ Rapier RigidBody dice — tumble + auto-settle + correct face snap | ✅ ABAS → TF |
 | **Shaders** | ⭐⭐⭐⭐ Wind + water via onBeforeCompile | ✅ ABAS → TF |
 | **AI Quality** | ⭐⭐⭐⭐⭐ Multi-action + trade proposals + trade eval | ✅ ABAS → TF |
