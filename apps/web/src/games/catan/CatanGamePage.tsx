@@ -22,13 +22,24 @@ import {
 } from './CatanProjections';
 import CatanLobby, { type LobbyConfig } from './CatanLobby';
 import { useCatanAI, type AIDifficulty } from './useCatanAI';
+import {
+  TutorialOverlay,
+  RulesReference,
+  GameChat,
+  DiceHistoryChart,
+  ResourceGainNotifications,
+  ZoomControls,
+  type ChatMessage,
+  type ResourceGain,
+} from './CatanHUDFeatures';
 import { useCatanSounds } from './useCatanSounds';
 import { useCatanPersistence } from './useCatanPersistence';
 import { 
   Home, Building2, Route, ScrollText,
   Users, ArrowRight, Package,
   Crown, Sword, Map, Wheat, Trees, Mountain,
-  Layers, ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake
+  Layers, ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
+  BookOpen, MessageSquare, BarChart3, HelpCircle
 } from 'lucide-react';
 import {
   type GameState,
@@ -652,6 +663,16 @@ export default function CatanGamePage() {
   const [rollKey, setRollKey] = useState(0);
   const [productionLog, setProductionLog] = useState<ProductionEntry[]>([]);
   const [showTradePanel, setShowTradePanel] = useState(false);
+
+  // ── New HUD feature toggles ────────────────────────────────────────────
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [showDiceHistory, setShowDiceHistory] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [diceHistory, setDiceHistory] = useState<number[]>([]);
+  const [resourceGains, setResourceGains] = useState<ResourceGain[]>([]);
+
   // ── Sounds ────────────────────────────────────────────────────────────────
   useCatanSounds({ gameState });
 
@@ -745,7 +766,20 @@ export default function CatanGamePage() {
             pushHistory(next);
             if (next.diceRoll) {
               const total = next.diceRoll[0] + next.diceRoll[1];
-              if (total !== 7) setProductionLog(computeProduction(prev, total));
+              setDiceHistory(h => [...h, total]);
+              if (total !== 7) {
+                const prod = computeProduction(prev, total);
+                setProductionLog(prod);
+                // Push resource gain notifications
+                for (const entry of prod) {
+                  setResourceGains(g => [...g, {
+                    id: `rg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    resource: entry.resource,
+                    amount: entry.amount,
+                    timestamp: Date.now(),
+                  }]);
+                }
+              }
             }
             return next;
           });
@@ -999,7 +1033,7 @@ export default function CatanGamePage() {
             ))}
           </div>
 
-          {/* Save / Load / Undo */}
+          {/* Save / Load / Undo + HUD toggles */}
           <div className="pointer-events-auto flex items-center gap-1 bg-black/60 backdrop-blur-md rounded-xl px-2 py-1.5 border border-white/10">
             <button
               onClick={() => handleAction('undo')}
@@ -1025,6 +1059,35 @@ export default function CatanGamePage() {
                 <FolderOpen className="w-4 h-4" />
               </button>
             )}
+            <div className="w-px h-4 bg-white/15 mx-0.5" />
+            <button
+              onClick={() => setShowTutorial(v => !v)}
+              title="Tutorial"
+              className={`p-1.5 rounded-lg transition-colors ${showTutorial ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowRules(v => !v)}
+              title="Rules Reference"
+              className={`p-1.5 rounded-lg transition-colors ${showRules ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <BookOpen className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowChat(v => !v)}
+              title="Chat"
+              className={`p-1.5 rounded-lg transition-colors ${showChat ? 'text-green-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowDiceHistory(v => !v)}
+              title="Dice History"
+              className={`p-1.5 rounded-lg transition-colors ${showDiceHistory ? 'text-orange-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 border border-white/10 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-slate-300 flex-shrink-0">
@@ -1195,6 +1258,33 @@ export default function CatanGamePage() {
           }}
         />
       )}
+
+      {/* === HUD OVERLAYS (Tutorial, Rules, Chat, Dice History) === */}
+      <TutorialOverlay isActive={showTutorial} onClose={() => setShowTutorial(false)} />
+      <RulesReference isOpen={showRules} onClose={() => setShowRules(false)} />
+      <GameChat
+        isOpen={showChat}
+        onClose={() => setShowChat(false)}
+        messages={chatMessages}
+        onSend={(text) => {
+          setChatMessages(prev => [...prev, {
+            id: `msg-${Date.now()}`,
+            playerId: currentPlayer.id,
+            playerName: currentPlayer.name,
+            playerColor: currentPlayer.color,
+            text,
+            timestamp: Date.now(),
+          }]);
+        }}
+        currentPlayerId={currentPlayer.id}
+      />
+      <DiceHistoryChart isOpen={showDiceHistory} onClose={() => setShowDiceHistory(false)} history={diceHistory} />
+      <ResourceGainNotifications gains={resourceGains} />
+      <ZoomControls
+        onZoomIn={() => {/* OrbitControls zoom handled by scroll — placeholder for programmatic zoom */}}
+        onZoomOut={() => {}}
+        onZoomFit={() => {}}
+      />
     </div>
   );
 }
