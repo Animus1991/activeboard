@@ -42,7 +42,8 @@ import {
   Users, ArrowRight, Package,
   Crown, Sword, Map,
   ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
-  BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered
+  BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered,
+  Trophy, AlertTriangle, ArrowUpDown
 } from 'lucide-react';
 import {
   type GameState,
@@ -671,6 +672,32 @@ export default function CatanGamePage() {
   const [showReplay, setShowReplay] = useState(false);
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayPlaying, setReplayPlaying] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [txLog, setTxLog] = useState<{ t: number; msg: string }[]>([]);
+  const [showTxLog, setShowTxLog] = useState(false);
+  const [vpCelebration, setVpCelebration] = useState<{ player: string; vp: number } | null>(null);
+  const prevVPs = useRef<Record<string, number>>({});
+
+  // ── VP celebration detection ───────────────────────────────────────────────
+  useEffect(() => {
+    for (const p of gameState.players) {
+      const prev = prevVPs.current[p.id] ?? p.victoryPoints;
+      if (p.victoryPoints > prev) {
+        setVpCelebration({ player: p.name, vp: p.victoryPoints });
+        setTxLog(l => [...l, { t: Date.now(), msg: `🏆 ${p.name} reached ${p.victoryPoints} VP` }]);
+        setTimeout(() => setVpCelebration(null), 2500);
+      }
+      prevVPs.current[p.id] = p.victoryPoints;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.players.map(p => p.victoryPoints).join(',')]);
+
+  // ── Hand limit warning ─────────────────────────────────────────────────────
+  const activeP = gameState.players[gameState.currentPlayerIndex];
+  const totalCards = activeP
+    ? Object.values(activeP.resources).reduce((a, b) => a + b, 0)
+    : 0;
+  const handLimitWarning = totalCards > 7;
 
   // ── Sounds ────────────────────────────────────────────────────────────────
   useCatanSounds({ gameState });
@@ -1102,6 +1129,20 @@ export default function CatanGamePage() {
             >
               <ListOrdered className="w-4 h-4" />
             </button>
+            <button
+              onClick={() => setShowLeaderboard(v => !v)}
+              title="Leaderboard"
+              className={`p-1.5 rounded-lg transition-colors ${showLeaderboard ? 'text-yellow-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <Trophy className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setShowTxLog(v => !v)}
+              title="Transaction Log"
+              className={`p-1.5 rounded-lg transition-colors ${showTxLog ? 'text-pink-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <ArrowUpDown className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 border border-white/10 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-slate-300 flex-shrink-0">
@@ -1319,6 +1360,109 @@ export default function CatanGamePage() {
         onZoomOut={() => {}}
         onZoomFit={() => {}}
       />
+
+      {/* === VP CELEBRATION OVERLAY — sparkle animation on VP gain === */}
+      {vpCelebration && (
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <div className="animate-bounce text-center">
+            <div className="text-6xl mb-2">🎉</div>
+            <div className="bg-black/80 backdrop-blur-lg rounded-2xl px-8 py-4 border border-yellow-500/40 shadow-[0_0_40px_rgba(234,179,8,0.3)]">
+              <p className="text-yellow-400 text-lg font-extrabold tracking-wide">{vpCelebration.player}</p>
+              <p className="text-white text-3xl font-black mt-1">{vpCelebration.vp} VP ⭐</p>
+            </div>
+          </div>
+          {/* Sparkle particles */}
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-2 h-2 rounded-full bg-yellow-400 animate-ping"
+              style={{
+                left: `${20 + Math.random() * 60}%`,
+                top: `${20 + Math.random() * 60}%`,
+                animationDelay: `${i * 0.12}s`,
+                animationDuration: '1.5s',
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* === HAND LIMIT WARNING — alert when > 7 cards (vulnerable to robber) === */}
+      {handLimitWarning && gameState.phase !== 'game-over' && (
+        <div className="absolute top-32 sm:top-36 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="flex items-center gap-2 bg-red-900/80 backdrop-blur-md rounded-xl px-4 py-2 border border-red-500/40 shadow-lg animate-pulse">
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <span className="text-red-200 text-xs font-semibold">
+              {totalCards} cards in hand! Discard to 7 if a 7 is rolled.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* === LEADERBOARD PANEL — VP ranking sidebar === */}
+      {showLeaderboard && (
+        <div className="absolute left-1/2 -translate-x-1/2 top-40 z-40 pointer-events-auto">
+          <div className="bg-black/85 backdrop-blur-lg rounded-2xl border border-white/15 shadow-2xl px-5 py-4 min-w-[260px]">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-yellow-400" />
+                Leaderboard
+              </h3>
+              <button onClick={() => setShowLeaderboard(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            <div className="space-y-1.5">
+              {[...gameState.players]
+                .sort((a, b) => b.victoryPoints - a.victoryPoints)
+                .map((p, i) => (
+                  <div
+                    key={p.id}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                      i === 0 ? 'bg-yellow-500/15 border border-yellow-500/30' : 'bg-white/5'
+                    }`}
+                  >
+                    <span className="text-xs font-bold text-white/50 w-4">{i + 1}</span>
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                    <span className="text-sm text-white font-medium flex-1 truncate">{p.name}</span>
+                    <span className="text-sm font-extrabold" style={{ color: p.color }}>
+                      {p.victoryPoints} VP
+                    </span>
+                    {p.hasLongestRoad && <span className="text-[10px]" title="Longest Road">🛤</span>}
+                    {p.playedKnights >= 3 && <span className="text-[10px]" title="Largest Army">⚔</span>}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === TRANSACTION LOG — resource flow history === */}
+      {showTxLog && (
+        <div className="absolute right-3 top-40 z-40 pointer-events-auto">
+          <div className="bg-black/85 backdrop-blur-lg rounded-2xl border border-white/15 shadow-2xl px-4 py-3 w-72 max-h-80 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <ArrowUpDown className="w-4 h-4 text-pink-400" />
+                Transaction Log
+              </h3>
+              <button onClick={() => setShowTxLog(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+            </div>
+            {txLog.length === 0 ? (
+              <p className="text-xs text-slate-500 text-center py-4">No transactions yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {txLog.slice(-50).reverse().map((entry, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs border-b border-white/5 pb-1">
+                    <span className="text-white/30 text-[10px] tabular-nums flex-shrink-0">
+                      {new Date(entry.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    <span className="text-white/70">{entry.msg}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

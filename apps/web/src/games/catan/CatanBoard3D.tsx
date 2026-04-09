@@ -11,6 +11,7 @@ import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessi
 import { useKeyboardControls } from './CatanHUDFeatures';
 import { XR, createXRStore } from '@react-three/xr';
 import { Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import { DepthOfField } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
 import {
@@ -18,6 +19,7 @@ import {
   type HexTile,
   type Vertex,
 } from './CatanEngine';
+import { CatanPresence3D, type Presence3DPlayer } from './CatanPresence3D';
 
 const xrStore = createXRStore({ hand: { teleportPointer: true } });
 
@@ -1750,12 +1752,13 @@ function PlayerPresence3D({ gameState }: { gameState: GameState }) {
 
 interface BoardContentProps {
   gameState: GameState;
+  presencePlayers?: Presence3DPlayer[];
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
 }
 
-function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
+function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
   const orbitRef = useRef<any>(null);
   useKeyboardControls(orbitRef);
 
@@ -1848,6 +1851,7 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
           intensity={0.25}
           mipmapBlur
         />
+        <DepthOfField focusDistance={0.02} focalLength={0.04} bokehScale={2} height={480} />
         <Vignette eskil={false} offset={0.15} darkness={0.65} />
         <SMAA />
       </EffectComposer>
@@ -1937,6 +1941,11 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
       {/* 3D Spatial Presence — holographic player nameplates around the board */}
       <PlayerPresence3D gameState={gameState} />
 
+      {/* 3D Video Presence Panels — webcam feeds floating in 3D scene */}
+      {presencePlayers && presencePlayers.length > 0 && (
+        <CatanPresence3D players={presencePlayers} />
+      )}
+
       {/* Spatial Ambience — 3D positioned ambient audio infrastructure */}
       <SpatialAmbience />
 
@@ -1990,13 +1999,14 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
 
 interface CatanBoard3DProps {
   gameState: GameState;
+  presencePlayers?: Presence3DPlayer[];
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
 }
 
 export default function CatanBoard3D({ 
-  gameState, onHexClick, onVertexClick, onEdgeClick
+  gameState, presencePlayers, onHexClick, onVertexClick, onEdgeClick
 }: CatanBoard3DProps) {
   return (
     <div className="w-full h-full bg-black overflow-hidden relative">
@@ -2014,6 +2024,7 @@ export default function CatanBoard3D({
           <Suspense fallback={null}>
             <BoardContent
               gameState={gameState}
+              presencePlayers={presencePlayers}
               onHexClick={onHexClick}
               onVertexClick={onVertexClick}
               onEdgeClick={onEdgeClick}
@@ -2021,6 +2032,15 @@ export default function CatanBoard3D({
           </Suspense>
         </XR>
       </Canvas>
+
+      {/* Canvas overlay — painterly texture feel (like ABAS) */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10 opacity-[0.018] mix-blend-overlay"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          backgroundSize: '256px 256px',
+        }}
+      />
 
       {/* VR Entry Button — only visible on WebXR-capable devices */}
       <button

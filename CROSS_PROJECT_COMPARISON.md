@@ -440,21 +440,22 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 | **Type Safety** | ⭐⭐⭐⭐⭐ Formal branded types + Vec3/Transform3D | ✅ Enhanced |
 | **3D Terrain** | ⭐⭐⭐⭐⭐ Painted PBR + 3D props (trees, mountains, sheep, wheat, cacti) | ✅ ABAS → TF |
 | **Lighting** | ⭐⭐⭐⭐⭐ 7-light cinematic + HDR Environment | ✅ Enhanced |
-| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + Vignette + SMAA | ✅ ABAS → TF |
-| **Physics** | ⭐⭐⭐ XR store initialized (Rapier ready) | 🔶 Infrastructure |
+| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + **DoF** + Vignette + SMAA | ✅ ABAS → TF |
+| **Physics** | ⭐⭐⭐⭐⭐ Rapier RigidBody dice — tumble + auto-settle + correct face snap | ✅ ABAS → TF |
 | **Shaders** | ⭐⭐⭐⭐ Wind + water via onBeforeCompile | ✅ ABAS → TF |
 | **AI Quality** | ⭐⭐⭐⭐⭐ Multi-action + trade proposals + trade eval | ✅ ABAS → TF |
-| **UI Features** | ⭐⭐⭐⭐⭐ Tutorial, Rules, Chat, Dice History, Save/Load, Replay, Zoom, WASD, Trade Rating | ✅ ABAS → TF |
+| **UI Features** | ⭐⭐⭐⭐⭐ Tutorial, Rules, Chat, Dice History, Save/Load, Replay, Zoom, WASD, Trade Rating, **Leaderboard**, **TX Log**, **VP Celebration**, **Hand Limit Warning** | ✅ Enhanced |
 | **Multiplayer** | ⭐⭐⭐⭐⭐ Liveblocks + WebRTC telepresence | ✅ TF original |
 | **Projections** | ⭐⭐⭐⭐⭐ 5 projection types | ✅ TF original |
 | **Testing** | ⭐⭐⭐ Framework exists | ✅ TF original |
 | **Documentation** | ⭐⭐⭐⭐⭐ Extensive + FeatureMatrixRow tracker | ✅ Enhanced |
 | **Board Generation** | ⭐⭐⭐⭐⭐ Variable sizes + constraint solver + randomization | ✅ ABAS → TF |
 | **Resource Animations** | ⭐⭐⭐⭐⭐ 3D flight arcs + mini 3D HUD icons | ✅ ABAS → TF |
-| **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates | ✅ Enhanced |
-| **VR/XR** | ⭐⭐⭐⭐ XR store + VR entry button | ✅ ABAS → TF |
-| **Sound System** | ⭐⭐⭐⭐⭐ 10 SFX (dice, build, road, card, trade, steal, robber, win, turn, place) + spatial audio infra | ✅ Enhanced |
+| **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates + **3D Video Panels** (CRT scanline, LIVE indicator, Html-in-scene) | ✅ Enhanced |
+| **VR/XR** | ⭐⭐⭐⭐⭐ XR store + VR entry button + immersive-ready | ✅ ABAS → TF |
+| **Sound System** | ⭐⭐⭐⭐⭐ 10 SFX + spatial audio infra + PositionalAudio anchors | ✅ Enhanced |
 | **Token Quality** | ⭐⭐⭐⭐⭐ Premium coins | ✅ TF original |
 | **Table Surface** | ⭐⭐⭐⭐⭐ Walnut + felt + contact shadows | ✅ Enhanced |
+| **Canvas Overlay** | ⭐⭐⭐⭐ Painterly noise texture overlay | ✅ ABAS → TF |
 
-**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing + shaders + AI + HUD features + resource animations + spatial presence + XR support.**
+**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing + physics dice + shaders + AI + HUD features + resource animations + 3D video presence panels + spatial presence + XR support + canvas overlay.**
