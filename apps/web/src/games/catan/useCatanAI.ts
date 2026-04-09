@@ -360,11 +360,149 @@ function aiStep(state: GameState, difficulty: AIDifficulty): GameState {
       }
     }
 
-    // ── End turn ──────────────────────────────────────────────────────────
+    // Nothing else to do → end turn
     return endTurn(state);
   }
 
   return state;
+}
+
+// ─── Multi-action main-phase loop — AI keeps building/trading until stuck ────
+
+function aiMainPhaseLoop(state: GameState, difficulty: AIDifficulty, maxIter = 12): GameState {
+  let current = state;
+  const pid = getCurrentPlayer(current).id;
+
+  for (let i = 0; i < maxIter; i++) {
+    if (current.phase !== 'main') break;
+    if (getCurrentPlayer(current).id !== pid) break;
+
+    const next = aiStep(current, difficulty);
+    if (next === current) break; // No progress — nothing left to do
+
+    // If AI ended turn, stop looping
+    if (next.phase !== 'main' || getCurrentPlayer(next).id !== pid) return next;
+    current = next;
+  }
+
+  // If still in main phase after all iterations, end turn
+  if (current.phase === 'main' && getCurrentPlayer(current).id === pid) {
+    return endTurn(current);
+  }
+  return current;
+}
+
+// ============================================================================
+// TRADE EVALUATION — rate incoming trade offers
+// ============================================================================
+
+export type TradeRating = 'great' | 'good' | 'fair' | 'bad' | 'terrible';
+
+export interface TradeEvaluation {
+  rating: TradeRating;
+  score: number; // -1.0 (terrible) to +1.0 (great)
+  reason: string;
+}
+
+/**
+ * Evaluate a trade offer for a given player.
+ * Positive score → good for this player; negative → bad for them.
+ */
+export function evaluateTradeOffer(
+  state: GameState,
+  playerId: string,
+  give: Partial<Record<ResourceType, number>>,
+  receive: Partial<Record<ResourceType, number>>,
+  difficulty: AIDifficulty = 'standard',
+): TradeEvaluation {
+  const player = state.players.find(p => p.id === playerId);
+  if (!player) return { rating: 'terrible', score: -1, reason: 'Player not found' };
+
+  const isExpert = difficulty === 'expert';
+  const needed = isExpert ? mostNeededResources(player) : [];
+
+  // Compute value of giving vs receiving
+  let giveValue = 0;
+  let receiveValue = 0;
+
+  for (const [r, n] of Object.entries(give) as [ResourceType, number][]) {
+    if (n <= 0) continue;
+    const ratio = getPlayerTradeRatio(state, playerId, r);
+    const needIdx = needed.indexOf(r);
+    const needWeight = needIdx === -1 ? 1.0 : 2.0 + (needed.length - needIdx) * 0.5;
+    giveValue += n * needWeight / ratio; // More painful to give needed resources
+  }
+
+  for (const [r, n] of Object.entries(receive) as [ResourceType, number][]) {
+    if (n <= 0) continue;
+    const ratio = getPlayerTradeRatio(state, playerId, r);
+    const needIdx = needed.indexOf(r);
+    const needWeight = needIdx === -1 ? 1.0 : 2.0 + (needed.length - needIdx) * 0.5;
+    receiveValue += n * needWeight / ratio;
+  }
+
+  // Expert: refuse trades that help the leader win
+  if (isExpert) {
+    const proposerId = state.players.find(p => p.id !== playerId)?.id;
+    if (proposerId) {
+      const proposer = state.players.find(p => p.id === proposerId);
+      if (proposer && proposer.victoryPoints >= 8) {
+        return { rating: 'terrible', score: -1, reason: 'Opponent is near victory' };
+      }
+    }
+  }
+
+  const diff = receiveValue - giveValue;
+  const score = Math.max(-1, Math.min(1, diff));
+
+  let rating: TradeRating;
+  let reason: string;
+  if (score > 0.5) { rating = 'great'; reason = 'Excellent deal — highly needed resources'; }
+  else if (score > 0.15) { rating = 'good'; reason = 'Good trade — favorable exchange'; }
+  else if (score > -0.15) { rating = 'fair'; reason = 'Fair trade — even exchange'; }
+  else if (score > -0.5) { rating = 'bad'; reason = 'Bad trade — giving away more value'; }
+  else { rating = 'terrible'; reason = 'Terrible trade — heavily one-sided'; }
+
+  return { rating, score, reason };
+}
+
+/**
+ * Generate an AI trade proposal to a human player (if one makes sense).
+ * Returns null if no useful trade can be found.
+ */
+export function generateAITradeProposal(
+  state: GameState,
+  aiPlayerId: string,
+  humanPlayerId: string,
+  difficulty: AIDifficulty = 'standard',
+): { give: Partial<Record<ResourceType, number>>; receive: Partial<Record<ResourceType, number>> } | null {
+  const aiPlayer = state.players.find(p => p.id === aiPlayerId);
+  const human = state.players.find(p => p.id === humanPlayerId);
+  if (!aiPlayer || !human) return null;
+
+  const aiNeeded = mostNeededResources(aiPlayer);
+  if (aiNeeded.length === 0) return null;
+
+  const want = aiNeeded[0]; // Most needed resource
+  if (human.resources[want] <= 0) return null;
+
+  // Find an excess resource to offer
+  const surplus = (Object.entries(aiPlayer.resources) as [ResourceType, number][])
+    .filter(([r, n]) => r !== want && n >= 2)
+    .sort(([, a], [, b]) => b - a);
+
+  if (surplus.length === 0) return null;
+
+  const offer = surplus[0][0];
+
+  // Check if human would find this fair or better
+  const eval_ = evaluateTradeOffer(state, humanPlayerId, { [want]: 1 }, { [offer]: 1 }, difficulty);
+  if (eval_.score < -0.5) return null; // Too unfair for human, skip
+
+  return {
+    give: { [offer]: 1 },
+    receive: { [want]: 1 },
+  };
 }
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
@@ -379,7 +517,7 @@ interface UseCatanAIOptions {
 export function useCatanAI({ setGameState, difficulty, humanPlayerIds }: UseCatanAIOptions) {
   const triggerAITurn = useCallback(async (state: GameState) => {
     let current = state;
-    const maxSteps = 20; // Safety cap
+    const maxSteps = 30; // Safety cap — higher for multi-action loop
     let steps = 0;
 
     while (steps < maxSteps) {
@@ -388,9 +526,17 @@ export function useCatanAI({ setGameState, difficulty, humanPlayerIds }: UseCata
       if (current.phase === 'game-over') break;
 
       // Small delay per step for readable UX
-      await new Promise(res => setTimeout(res, difficulty === 'expert' ? 300 : 500));
+      await new Promise(res => setTimeout(res, difficulty === 'expert' ? 250 : 400));
 
-      const next = aiStep(current, difficulty);
+      let next: GameState;
+
+      // Multi-action loop for main phase — AI takes ALL possible actions before ending turn
+      if (current.phase === 'main') {
+        next = aiMainPhaseLoop(current, difficulty);
+      } else {
+        next = aiStep(current, difficulty);
+      }
+
       if (next === current) break; // No progress
 
       setGameState(next);
@@ -403,5 +549,5 @@ export function useCatanAI({ setGameState, difficulty, humanPlayerIds }: UseCata
     }
   }, [difficulty, humanPlayerIds, setGameState]);
 
-  return { triggerAITurn };
+  return { triggerAITurn, evaluateTradeOffer, generateAITradeProposal };
 }

@@ -6,7 +6,8 @@
 
 import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, PerspectiveCamera } from '@react-three/drei';
+import { OrbitControls, Text, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import {
   type GameState,
@@ -586,6 +587,16 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         );
       })()}
 
+      {/* 3D Terrain Props — volumetric decorations on the hex surface */}
+      {TERRAIN_PROPS[hex.terrain] && (() => {
+        const PropComponent = TERRAIN_PROPS[hex.terrain];
+        return (
+          <group position={[0, mat.height + 0.005, 0]}>
+            <PropComponent />
+          </group>
+        );
+      })()}
+
       {/* Robber — chess-piece style dark figurine */}
       {hex.hasRobber && (
         <group position={[0, mat.height + 0.02, 0]}>
@@ -624,6 +635,230 @@ function getProbDots(n: number): number {
   const dots: Record<number, number> = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 };
   return dots[n] || 0;
 }
+
+// ============================================================================
+// 3D TERRAIN PROPS — volumetric decorations on hex surfaces
+// ============================================================================
+
+function ForestProps() {
+  const trees = useMemo(() =>
+    Array.from({ length: 16 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.6,
+      z: (Math.random() - 0.5) * 1.6,
+      scale: 0.5 + Math.random() * 0.6,
+      rotation: Math.random() * Math.PI,
+    })).filter(t => t.x * t.x + t.z * t.z > 0.25), // Avoid centre (number token area)
+  []);
+  return (
+    <group>
+      {trees.map((t, i) => (
+        <group key={i} position={[t.x, 0, t.z]} scale={t.scale} rotation={[0, t.rotation, 0]}>
+          <mesh castShadow position={[0, 0.08, 0]}>
+            <cylinderGeometry args={[0.012, 0.020, 0.22, 6]} />
+            <meshStandardMaterial color="#3A2210" roughness={0.95} />
+          </mesh>
+          <mesh castShadow position={[0, 0.28, 0]}>
+            <coneGeometry args={[0.14, 0.36, 7]} />
+            <meshStandardMaterial color="#1A4C10" roughness={0.85} flatShading />
+          </mesh>
+          <mesh castShadow position={[0, 0.38, 0]} scale={0.78}>
+            <coneGeometry args={[0.11, 0.30, 7]} />
+            <meshStandardMaterial color="#226E18" roughness={0.80} flatShading />
+          </mesh>
+          <mesh castShadow position={[0, 0.46, 0]} scale={0.56}>
+            <coneGeometry args={[0.09, 0.24, 7]} />
+            <meshStandardMaterial color="#2E8420" roughness={0.75} flatShading />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function MountainProps() {
+  const peaks = useMemo(() => [
+    { x: 0.3, z: -0.2, sx: 0.7, sy: 1.0, sz: 0.7, rot: 0.2 },
+    { x: -0.35, z: 0.25, sx: 0.5, sy: 0.7, sz: 0.5, rot: 0.8 },
+    { x: 0.0, z: 0.4, sx: 0.4, sy: 0.5, sz: 0.4, rot: 1.2 },
+    { x: -0.1, z: -0.45, sx: 0.35, sy: 0.45, sz: 0.35, rot: 0.5 },
+  ], []);
+  const rocks = useMemo(() =>
+    Array.from({ length: 8 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.4,
+      z: (Math.random() - 0.5) * 1.4,
+      s: 0.03 + Math.random() * 0.04,
+      r: [Math.random(), Math.random(), Math.random()] as [number, number, number],
+    })).filter(r => r.x * r.x + r.z * r.z > 0.20),
+  []);
+  return (
+    <group>
+      {peaks.map((p, i) => (
+        <group key={i} position={[p.x, 0, p.z]} scale={[p.sx, p.sy, p.sz]} rotation={[0, p.rot, 0]}>
+          <mesh castShadow position={[0, 0.30, 0]}>
+            <coneGeometry args={[0.50, 0.65, 5]} />
+            <meshStandardMaterial color="#4A4E5A" roughness={0.88} metalness={0.10} flatShading />
+          </mesh>
+          <mesh position={[0, 0.52, 0]} scale={[1.0, 0.30, 1.0]}>
+            <coneGeometry args={[0.50, 0.65, 5]} />
+            <meshStandardMaterial color="#E8E8F0" roughness={0.15} emissive="#FFFFFF" emissiveIntensity={0.04} flatShading />
+          </mesh>
+        </group>
+      ))}
+      {rocks.map((r, i) => (
+        <mesh key={`r${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={r.r} castShadow>
+          <dodecahedronGeometry />
+          <meshStandardMaterial color="#2A2E38" roughness={0.90} metalness={0.05} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function HillsProps() {
+  const mounds = useMemo(() =>
+    Array.from({ length: 6 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.2,
+      z: (Math.random() - 0.5) * 1.2,
+      sx: 0.25 + Math.random() * 0.20,
+      sy: 0.12 + Math.random() * 0.15,
+      sz: 0.25 + Math.random() * 0.20,
+      col: ['#6A4220', '#7A5430', '#553018'][Math.floor(Math.random() * 3)],
+    })).filter(m => m.x * m.x + m.z * m.z > 0.18),
+  []);
+  const smallRocks = useMemo(() =>
+    Array.from({ length: 10 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.3,
+      z: (Math.random() - 0.5) * 1.3,
+      s: 0.02 + Math.random() * 0.03,
+    })).filter(r => r.x * r.x + r.z * r.z > 0.15),
+  []);
+  return (
+    <group>
+      {mounds.map((m, i) => (
+        <mesh key={i} position={[m.x, m.sy * 0.5, m.z]} scale={[m.sx, m.sy, m.sz]} castShadow receiveShadow>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color={m.col} roughness={0.95} flatShading />
+        </mesh>
+      ))}
+      {smallRocks.map((r, i) => (
+        <mesh key={`hr${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={[Math.random(), Math.random(), 0]} castShadow>
+          <dodecahedronGeometry />
+          <meshStandardMaterial color={Math.random() > 0.5 ? '#555' : '#3A3A3A'} roughness={0.70} metalness={0.20} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function FieldsProps() {
+  const stalks = useMemo(() =>
+    Array.from({ length: 40 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.5,
+      z: (Math.random() - 0.5) * 1.5,
+      rot: Math.random() * Math.PI,
+      scale: 0.5 + Math.random() * 0.5,
+      col: Math.random() > 0.3 ? '#D4A520' : '#B89018',
+    })).filter(s => s.x * s.x + s.z * s.z > 0.22),
+  []);
+  return (
+    <group>
+      {stalks.map((s, i) => (
+        <mesh key={i} position={[s.x, 0.08, s.z]} rotation={[0, s.rot, 0]} scale={s.scale} castShadow>
+          <boxGeometry args={[0.012, 0.16, 0.012]} />
+          <meshStandardMaterial color={s.col} roughness={0.50} />
+        </mesh>
+      ))}
+      {[-0.4, -0.15, 0.10, 0.35].map((x, i) => (
+        <mesh key={`f${i}`} position={[x, 0.005, 0]} receiveShadow>
+          <boxGeometry args={[0.04, 0.01, 1.2]} />
+          <meshStandardMaterial color="#3A2010" roughness={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function PastureProps() {
+  const grassClumps = useMemo(() =>
+    Array.from({ length: 30 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.4,
+      z: (Math.random() - 0.5) * 1.4,
+      s: 0.04 + Math.random() * 0.08,
+    })).filter(g => g.x * g.x + g.z * g.z > 0.20),
+  []);
+  const flowers = useMemo(() =>
+    Array.from({ length: 16 }).map(() => ({
+      x: (Math.random() - 0.5) * 1.3,
+      z: (Math.random() - 0.5) * 1.3,
+      col: ['#FFF', '#FFEA00', '#FF006E', '#7209B7'][Math.floor(Math.random() * 4)],
+    })).filter(f => f.x * f.x + f.z * f.z > 0.20),
+  []);
+  const sheep = useMemo(() => [
+    { x: 0.5, z: 0.3 }, { x: -0.4, z: -0.5 }, { x: 0.2, z: -0.6 },
+  ], []);
+  return (
+    <group>
+      {grassClumps.map((g, i) => (
+        <mesh key={i} position={[g.x, g.s * 0.3, g.z]} scale={g.s}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color="#4CA030" roughness={0.95} />
+        </mesh>
+      ))}
+      {flowers.map((f, i) => (
+        <mesh key={`fl${i}`} position={[f.x, 0.04, f.z]}>
+          <sphereGeometry args={[0.018, 6, 6]} />
+          <meshBasicMaterial color={f.col} />
+        </mesh>
+      ))}
+      {sheep.map((s, i) => (
+        <group key={`sh${i}`} position={[s.x, 0.055, s.z]} scale={0.06}>
+          <mesh castShadow>
+            <sphereGeometry args={[1, 10, 10]} />
+            <meshStandardMaterial color="#F0F0F0" roughness={0.95} />
+          </mesh>
+          <mesh position={[0.9, 0.4, 0]} scale={0.35}>
+            <sphereGeometry />
+            <meshStandardMaterial color="#1A1A1A" roughness={0.90} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function DesertProps() {
+  return (
+    <group>
+      <mesh position={[0.25, 0.03, 0.12]} rotation={[0.08, 0.2, 0.08]} castShadow>
+        <sphereGeometry args={[0.30, 12, 12]} />
+        <meshStandardMaterial color="#C87A06" roughness={0.95} flatShading />
+      </mesh>
+      <mesh position={[-0.30, 0.02, -0.20]} rotation={[-0.06, -0.3, 0]} castShadow>
+        <sphereGeometry args={[0.22, 12, 12]} />
+        <meshStandardMaterial color="#A06008" roughness={0.95} flatShading />
+      </mesh>
+      <group position={[0.12, 0.06, -0.35]} scale={0.4}>
+        <mesh castShadow>
+          <cylinderGeometry args={[0.025, 0.025, 0.18, 6]} />
+          <meshStandardMaterial color="#166534" roughness={0.85} />
+        </mesh>
+        <mesh position={[0.04, 0.04, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.018, 0.018, 0.08, 6]} />
+          <meshStandardMaterial color="#166534" roughness={0.85} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+const TERRAIN_PROPS: Record<string, React.FC> = {
+  forest: ForestProps,
+  mountains: MountainProps,
+  hills: HillsProps,
+  fields: FieldsProps,
+  pasture: PastureProps,
+  desert: DesertProps,
+};
 
 // ============================================================================
 // PROCEDURAL PBR TEXTURES
@@ -1353,6 +1588,32 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
       {/* Background */}
       <color attach="background" args={['#07101E']} />
       <fog attach="fog" args={['#07101E', 20, 38]} />
+
+      {/* HDR Environment — realistic reflections on metallic/glossy surfaces */}
+      <Environment preset="apartment" background={false} />
+
+      {/* High-res contact shadows — soft diffuse ground shadows */}
+      <ContactShadows
+        position={[0, -0.025, 0]}
+        opacity={0.35}
+        scale={30}
+        blur={2.5}
+        far={8}
+        resolution={1024}
+        color="#000000"
+      />
+
+      {/* Post-processing effects pipeline */}
+      <EffectComposer multisampling={0}>
+        <Bloom
+          luminanceThreshold={0.85}
+          luminanceSmoothing={0.5}
+          intensity={0.25}
+          mipmapBlur
+        />
+        <Vignette eskil={false} offset={0.15} darkness={0.65} />
+        <SMAA />
+      </EffectComposer>
 
       {/* ══ WALNUT TABLE SURFACE ══ */}
       {/* Main table body — dark walnut with subtle sheen */}
