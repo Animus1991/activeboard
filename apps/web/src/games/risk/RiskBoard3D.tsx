@@ -10,7 +10,6 @@ import {
   OrbitControls,
   Text,
   PerspectiveCamera,
-  Html,
 } from '@react-three/drei';
 import * as THREE from 'three';
 import { type GameState, type Territory, CONTINENTS } from './RiskEngine';
@@ -63,7 +62,7 @@ function TerritoryPiece({ territory, playerColor, continentColor, isSelected, is
   const pos = useMemo(() => toBoard(territory.position.x, territory.position.y), [territory.position]);
 
   // Animate hover
-  useFrame((state) => {
+  useFrame((_state) => {
     if (groupRef.current) {
       const lift = hovered ? 0.15 : isSelected ? 0.1 : 0;
       groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, pos[1] + lift, 0.1);
@@ -238,9 +237,10 @@ function ConnectionLines({ gameState }: { gameState: GameState }) {
         const pts = [new THREE.Vector3(l.from[0], 0.08, l.from[2]), new THREE.Vector3(l.to[0], 0.08, l.to[2])];
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
         return (
-          <line key={i} geometry={geo}>
-            <lineBasicMaterial color={l.sameOwner ? '#6EE7B7' : '#374151'} transparent opacity={l.sameOwner ? 0.5 : 0.2} />
-          </line>
+          <primitive key={i} object={(() => {
+            const mat = new THREE.LineBasicMaterial({ color: l.sameOwner ? '#6EE7B7' : '#374151', transparent: true, opacity: l.sameOwner ? 0.5 : 0.2 });
+            return new THREE.Line(geo, mat);
+          })()} />
         );
       })}
     </group>

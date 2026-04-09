@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useGameSync, type BoardGameType } from './useGameSync';
+import { useGameSync } from './useGameSync';
 
 interface UseMultiplayerGameReturn<T> {
   // Mode
@@ -29,6 +29,10 @@ interface UseMultiplayerGameReturn<T> {
 
   // Action relay (client → host)
   sendAction: (action: string, data?: unknown) => void;
+
+  // Presence signaling (WebRTC relay over game action channel)
+  sendSignal: (signal: unknown) => void;
+  registerSignalHandler: (handler: ((fromPlayerId: string, signal: unknown) => void) | null) => void;
 
   // Player info
   playerCount: number;
@@ -50,14 +54,25 @@ export function useMultiplayerGame<T = unknown>(): UseMultiplayerGameReturn<T> {
   const [playerName] = useState(() => `Player_${Math.random().toString(36).substring(2, 6)}`);
   const [playerColor] = useState(() => PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)]);
 
+  // Signal handler registry for WebRTC presence signaling
+  const signalHandlerRef = useRef<((fromPlayerId: string, signal: unknown) => void) | null>(null);
+
+  // Route incoming game actions: split presence signals from regular game actions
+  const handleIncomingAction = useCallback((fromPlayerId: string, action: string, data?: unknown) => {
+    if (action === 'presence-signal') {
+      signalHandlerRef.current?.(fromPlayerId, data);
+    }
+  }, []);
+
   // Only connect if multiplayer params present
   const sync = useGameSync({
     roomCode: roomCode || 'NONE',
     playerName,
     playerColor,
     deviceType: 'pc',
-    enabled: shouldConnect, // Only connect when multiplayer mode is active
+    enabled: shouldConnect,
     onError: (err) => console.warn('[Multiplayer] Error:', err),
+    onGameAction: handleIncomingAction,
   });
 
   // Track whether we actually want multiplayer
@@ -102,6 +117,17 @@ export function useMultiplayerGame<T = unknown>(): UseMultiplayerGameReturn<T> {
     sync.rollDice(count);
   }, [active, sync]);
 
+  // Presence signaling — send signal via GAME_ACTION channel with action='presence-signal'
+  const sendSignal = useCallback((signal: unknown) => {
+    if (!active) return;
+    sync.sendGameAction('presence-signal', signal);
+  }, [active, sync]);
+
+  // Register the signal callback (called by CatanPresence)
+  const registerSignalHandler = useCallback((handler: ((fromPlayerId: string, signal: unknown) => void) | null) => {
+    signalHandlerRef.current = handler;
+  }, []);
+
   // If not multiplayer, return noop defaults
   if (!active) {
     return {
@@ -114,6 +140,8 @@ export function useMultiplayerGame<T = unknown>(): UseMultiplayerGameReturn<T> {
       syncState: () => {},
       remoteState: null,
       sendAction: () => {},
+      sendSignal: () => {},
+      registerSignalHandler: () => {},
       playerCount: 1,
       playerNames: [],
       sendChat: () => {},
@@ -131,6 +159,8 @@ export function useMultiplayerGame<T = unknown>(): UseMultiplayerGameReturn<T> {
     syncState,
     remoteState,
     sendAction,
+    sendSignal,
+    registerSignalHandler,
     playerCount: sync.players.length,
     playerNames: sync.players.map(p => p.name),
     sendChat,

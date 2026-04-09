@@ -8,6 +8,18 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // Force a single copy of these packages — prevents "Multiple instances of Three.js"
+    // and the "R3F: Hooks can only be used within the Canvas" crash from postprocessing
+    dedupe: ['three', '@react-three/fiber', '@react-three/drei', 'react', 'react-dom'],
+  },
+  optimizeDeps: {
+    // Pre-bundle together so Vite doesn't split them across chunks
+    include: [
+      'three',
+      '@react-three/fiber',
+      '@react-three/drei',
+      '@react-three/postprocessing',
+    ],
   },
   server: {
     port: 5173,

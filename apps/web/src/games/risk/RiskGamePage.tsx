@@ -38,7 +38,7 @@ interface WorldMapProps {
   onTerritoryClick: (territoryId: string) => void;
 }
 
-function WorldMap({ gameState, selectedTerritory, onTerritoryClick }: WorldMapProps) {
+export function _WorldMap({ gameState, selectedTerritory, onTerritoryClick }: WorldMapProps) {
   const getPlayerColor = (playerId: string | null) => {
     if (!playerId) return '#666';
     const player = gameState.players.find(p => p.id === playerId);

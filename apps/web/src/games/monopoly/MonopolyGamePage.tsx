@@ -12,7 +12,7 @@ import {
   ArrowRight, X, Check, Gavel,
   Building2, Landmark,
   ChevronDown, ChevronUp, RotateCcw,
-  Volume2, VolumeX, Settings, HelpCircle,
+  Volume2, VolumeX,
   Crown, Banknote, CreditCard, ArrowLeft
 } from 'lucide-react';
 import MonopolyBoard3D from './MonopolyBoard3D';

@@ -116,7 +116,10 @@ interface UseGameSyncOptions {
   deviceType: PlayerPresence['deviceType'];
   enabled?: boolean; // default true - set false to skip connection
   onError?: (error: string) => void;
+  onGameAction?: (playerId: string, action: string, data?: unknown) => void;
 }
+
+export { type UseGameSyncOptions };
 
 interface UseGameSyncReturn {
   // Connection state
@@ -168,6 +171,7 @@ export function useGameSync({
   deviceType,
   enabled = true,
   onError,
+  onGameAction,
 }: UseGameSyncOptions): UseGameSyncReturn {
   // Skip connection if disabled
   const shouldConnect = enabled && roomCode && roomCode !== 'NONE';
@@ -187,6 +191,11 @@ export function useGameSync({
   
   // Callbacks for board game events
   const onGameActionRef = useRef<((playerId: string, action: string, data?: unknown) => void) | null>(null);
+
+  // Keep onGameAction callback in sync with the option (so callers can update without re-creating the hook)
+  useEffect(() => {
+    onGameActionRef.current = onGameAction ?? null;
+  }, [onGameAction]);
   const onGameStartedRef = useRef<((gameType: BoardGameType) => void) | null>(null);
   
   // WebSocket ref

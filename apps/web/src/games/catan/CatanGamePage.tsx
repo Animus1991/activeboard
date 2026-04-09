@@ -3,21 +3,38 @@
  * Complete game interface with hexagonal board
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import CatanBoard3D from './CatanBoard3D';
+const CatanTradePanel = lazy(() => import('./CatanTradePanel'));
+
+type CameraMode = 'tactical' | 'table' | 'inspect' | 'cinematic';
+import CatanPresence from './CatanPresence';
+import CatanDice from './CatanDice';
+import {
+  computeUIProjection,
+  computeVPBreakdown,
+  computeResourceSummary,
+  computeProduction,
+  type ProductionEntry,
+} from './CatanProjections';
+import CatanLobby, { type LobbyConfig } from './CatanLobby';
+import { useCatanAI, type AIDifficulty } from './useCatanAI';
+import { useCatanSounds } from './useCatanSounds';
+import { useCatanPersistence } from './useCatanPersistence';
 import { 
-  Dice1, Dice2, Dice3, Dice4, Dice5, Dice6,
   Home, Building2, Route, ScrollText,
-  Users, ArrowRight, Repeat, Package,
+  Users, ArrowRight, Package,
   Crown, Sword, Map, Wheat, Trees, Mountain,
-  Layers, ArrowLeft, RotateCcw
+  Layers, ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake
 } from 'lucide-react';
 import {
   type GameState,
   type Player,
   type ResourceType,
+  type DevelopmentCard,
   createInitialGameState,
   getCurrentPlayer,
   performRoll,
@@ -40,8 +57,56 @@ import {
   playRoadBuilding,
   buildFreeRoad,
   hasResources,
+  discardResources,
   BUILDING_COSTS,
 } from './CatanEngine';
+
+// ============================================================================
+// DISCARD PANEL — lets the robbed player select resources to discard
+// ============================================================================
+
+interface DiscardPanelProps {
+  player: Player;
+  mustDiscard: number;
+  onDiscard: (resources: Record<ResourceType, number>) => void;
+}
+
+function DiscardPanel({ player, mustDiscard, onDiscard }: DiscardPanelProps) {
+  const [selection, setSelection] = useState<Record<ResourceType, number>>(
+    { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 }
+  );
+  const totalSelected = Object.values(selection).reduce((a, b) => a + b, 0);
+
+  const adjust = (r: ResourceType, delta: number) => {
+    setSelection(prev => {
+      const next = { ...prev, [r]: Math.max(0, Math.min(player.resources[r], prev[r] + delta)) };
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      {(Object.keys(player.resources) as ResourceType[]).map(r => (
+        <div key={r} className="flex items-center justify-between">
+          <span className="text-sm text-slate-300 capitalize w-16">{r}</span>
+          <span className="text-xs text-slate-500 w-8">×{player.resources[r]}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => adjust(r, -1)} className="w-6 h-6 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm flex items-center justify-center">−</button>
+            <span className="text-white font-bold w-5 text-center">{selection[r]}</span>
+            <button onClick={() => adjust(r, +1)} className="w-6 h-6 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm flex items-center justify-center">+</button>
+          </div>
+        </div>
+      ))}
+      <button
+        disabled={totalSelected !== mustDiscard}
+        onClick={() => onDiscard(selection)}
+        className="w-full py-2 mt-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white text-sm font-bold rounded-lg"
+      >
+        Discard {totalSelected}/{mustDiscard}
+      </button>
+    </div>
+  );
+}
 
 // ============================================================================
 // RESOURCE ICONS
@@ -63,7 +128,6 @@ const ResourceColors: Record<ResourceType, string> = {
   ore: 'bg-slate-500',
 };
 
-const DiceIcons = [Dice1, Dice2, Dice3, Dice4, Dice5, Dice6];
 
 // ============================================================================
 // PLAYER PANEL
@@ -72,9 +136,13 @@ const DiceIcons = [Dice1, Dice2, Dice3, Dice4, Dice5, Dice6];
 interface PlayerPanelProps {
   player: Player;
   isCurrentPlayer: boolean;
+  isAI?: boolean;
+  currentTurn?: number;
+  gameState: GameState;
 }
 
-function PlayerPanel({ player, isCurrentPlayer }: PlayerPanelProps) {
+function PlayerPanel({ player, isCurrentPlayer, isAI, currentTurn = 0, gameState }: PlayerPanelProps) {
+  const vp = computeVPBreakdown(gameState, player.id);
   return (
     <div 
       className={`rounded-lg border-2 p-3 transition-all ${
@@ -84,18 +152,31 @@ function PlayerPanel({ player, isCurrentPlayer }: PlayerPanelProps) {
       }`}
     >
       <div className="flex items-center gap-3 mb-2">
-        <div 
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold"
-          style={{ backgroundColor: player.color }}
-        >
-          {player.name[0]}
+        <div className="relative flex-shrink-0">
+          <img
+            src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(player.name)}&backgroundColor=${player.color.replace('#', '')}`}
+            alt={player.name}
+            className="w-8 h-8 rounded-full object-cover border-2"
+            style={{ borderColor: player.color }}
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+          {isAI && <Bot className="w-3 h-3 text-violet-300 absolute -bottom-0.5 -right-0.5" />}
         </div>
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-white">{player.name}</span>
             {isCurrentPlayer && <Crown className="w-4 h-4 text-yellow-400" />}
           </div>
-          <div className="text-sm text-purple-400 font-bold">{player.victoryPoints} VP</div>
+          <div className="text-sm text-purple-400 font-bold">{vp.total} VP</div>
+          {vp.total > 0 && (
+            <div className="text-[8px] text-slate-500 flex gap-0.5 flex-wrap mt-0.5">
+              {vp.settlements > 0 && <span>🏠×{vp.settlements}</span>}
+              {vp.cities > 0 && <span>🏙×{vp.cities}</span>}
+              {vp.longestRoad > 0 && <span className="text-blue-400">🛤+2</span>}
+              {vp.largestArmy > 0 && <span className="text-red-400">⚔+2</span>}
+              {vp.devCardVP > 0 && <span className="text-yellow-400">⭐×{vp.devCardVP}</span>}
+            </div>
+          )}
         </div>
       </div>
 
@@ -126,11 +207,60 @@ function PlayerPanel({ player, isCurrentPlayer }: PlayerPanelProps) {
         )}
       </div>
 
-      {/* Dev cards count */}
+      {/* Dev cards with per-card hover tooltips */}
       {player.developmentCards.length > 0 && (
-        <div className="mt-2 text-xs text-slate-400">
-          <ScrollText className="w-3 h-3 inline mr-1" />
-          {player.developmentCards.length} development cards
+        <div className="mt-2 flex flex-wrap gap-1">
+          {player.developmentCards.map((card, idx) => (
+            <DevCardBadge key={idx} card={card} currentTurn={currentTurn} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// DEV CARD BADGE WITH TOOLTIP
+// ============================================================================
+
+const DEV_CARD_LABELS: Record<string, string> = {
+  'knight': '⚔️ Knight',
+  'victory-point': '⭐ Victory Point',
+  'road-building': '🛤️ Road Building',
+  'year-of-plenty': '🎁 Year of Plenty',
+  'monopoly': '💰 Monopoly',
+};
+
+function DevCardBadge({ card, currentTurn }: { card: DevelopmentCard; currentTurn: number }) {
+  const [hovered, setHovered] = useState(false);
+  const isNew = card.turnBought === currentTurn;
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-default select-none transition-all ${
+        card.isPlayed
+          ? 'bg-slate-700 text-slate-500 line-through'
+          : isNew
+            ? 'bg-amber-600 text-white ring-1 ring-amber-400'
+            : 'bg-purple-700 text-purple-200'
+      }`}>
+        📜
+      </div>
+      {hovered && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 whitespace-nowrap">
+          <div className="bg-slate-900 border border-slate-600 text-white text-xs rounded-lg px-2 py-1.5 shadow-xl">
+            <div className="font-bold">{DEV_CARD_LABELS[card.type] ?? card.type}</div>
+            {isNew && !card.isPlayed && (
+              <div className="text-amber-400 text-[9px] font-semibold mt-0.5">NEW — cannot play yet</div>
+            )}
+            {card.isPlayed && (
+              <div className="text-slate-500 text-[9px] mt-0.5">Already played</div>
+            )}
+          </div>
+          <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-600 rotate-45 mx-auto -mt-1" />
         </div>
       )}
     </div>
@@ -145,10 +275,16 @@ interface ActionPanelProps {
   gameState: GameState;
   onAction: (action: string, data?: unknown) => void;
   rolling: boolean;
+  rollKey?: number;
+  onOpenTrade?: () => void;
 }
 
-function ActionPanel({ gameState, onAction, rolling }: ActionPanelProps) {
+function ActionPanel({ gameState, onAction, rolling, rollKey = 0, onOpenTrade }: ActionPanelProps) {
   const currentPlayer = getCurrentPlayer(gameState);
+  const [yopR1, setYopR1] = useState<ResourceType>('wood');
+  const [yopR2, setYopR2] = useState<ResourceType>('wheat');
+  const [monoRes, setMonoRes] = useState<ResourceType>('wood');
+  const RESOURCES: ResourceType[] = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
 
   const renderPhaseActions = () => {
     switch (gameState.phase) {
@@ -182,15 +318,50 @@ function ActionPanel({ gameState, onAction, rolling }: ActionPanelProps) {
             <p className="text-slate-300">
               {currentPlayer.name}'s turn. Roll the dice!
             </p>
+            {currentPlayer.developmentCards.some(
+              c => !c.isPlayed && c.type === 'knight' && c.turnBought < gameState.turn
+            ) && !gameState.devCardPlayedThisTurn && (
+              <button
+                onClick={() => onAction('play-knight')}
+                className="w-full py-2 bg-orange-700 hover:bg-orange-600 text-white text-sm rounded-lg flex items-center justify-center gap-1.5"
+              >
+                ⚔️ Play Knight Before Roll
+              </button>
+            )}
             <button
               onClick={() => onAction('roll')}
               disabled={rolling}
               className="w-full py-3 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 disabled:opacity-50 text-white font-bold rounded-lg flex items-center justify-center gap-2"
             >
-              {rolling ? 'Rolling...' : 'Roll Dice'}
+              {rolling ? 'Rolling...' : '🎲 Roll Dice'}
             </button>
           </div>
         );
+
+      case 'discard': {
+        const discIdx = gameState.discardingPlayerIndex ?? 0;
+        const discPlayer = gameState.players[discIdx];
+        const totalRes = discPlayer ? Object.values(discPlayer.resources).reduce((a, b) => a + b, 0) : 0;
+        const mustDiscard = Math.floor(totalRes / 2);
+        const isMyTurn = discPlayer?.id === currentPlayer.id;
+        return (
+          <div className="space-y-3">
+            <p className={`font-semibold ${isMyTurn ? 'text-red-300' : 'text-orange-300'}`}>
+              {discPlayer?.name} must discard {mustDiscard} of {totalRes} resources
+            </p>
+            {isMyTurn && (
+              <DiscardPanel
+                player={discPlayer!}
+                mustDiscard={mustDiscard}
+                onDiscard={(resources) => onAction('discard', resources)}
+              />
+            )}
+            {!isMyTurn && (
+              <p className="text-slate-400 text-sm">Waiting for {discPlayer?.name}…</p>
+            )}
+          </div>
+        );
+      }
 
       case 'robber-move':
         return (
@@ -201,25 +372,39 @@ function ActionPanel({ gameState, onAction, rolling }: ActionPanelProps) {
           </div>
         );
 
-      case 'robber-steal':
+      case 'robber-steal': {
+        const robHex = gameState.hexTiles.find(h => h.id === gameState.robberHexId);
+        const adjIds = robHex
+          ? new Set(gameState.vertices
+              .filter(v => v.hexIds.includes(robHex.id) && v.building && v.building.playerId !== currentPlayer.id)
+              .map(v => v.building!.playerId))
+          : new Set<string>();
+        const stealTargets = adjIds.size > 0
+          ? gameState.players.filter(p => adjIds.has(p.id))
+          : gameState.players.filter(p => p.id !== currentPlayer.id);
         return (
           <div className="space-y-3">
             <p className="text-orange-300">
-              Choose a player to steal from:
+              {stealTargets.length ? 'Steal from an adjacent player:' : 'No adjacent opponents — no steal'}
             </p>
-            {gameState.players
-              .filter(p => p.id !== currentPlayer.id)
-              .map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => onAction('steal', p.id)}
-                  className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg"
-                >
-                  Steal from {p.name}
-                </button>
-              ))}
+            {stealTargets.map(p => (
+              <button
+                key={p.id}
+                onClick={() => onAction('steal', p.id)}
+                className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg"
+              >
+                Steal from {p.name}
+              </button>
+            ))}
+            {!stealTargets.length && (
+              <button onClick={() => onAction('end-turn')}
+                className="w-full py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg">
+                Continue
+              </button>
+            )}
           </div>
         );
+      }
 
       case 'main':
         return (
@@ -260,13 +445,75 @@ function ActionPanel({ gameState, onAction, rolling }: ActionPanelProps) {
               </button>
             </div>
 
-            {/* Trade with bank */}
+            {/* Trade button — opens full trade panel */}
             <button
-              onClick={() => onAction('bank-trade')}
-              className="w-full py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg flex items-center justify-center gap-2"
+              onClick={onOpenTrade}
+              className="w-full py-2 bg-teal-700 hover:bg-teal-600 text-white rounded-lg flex items-center justify-center gap-2"
             >
-              <Repeat className="w-4 h-4" /> Trade with Bank (4:1)
+              <Handshake className="w-4 h-4" /> Trade
             </button>
+
+            {/* Dev card hand */}
+            {(() => {
+              const hand = currentPlayer.developmentCards.filter(
+                c => !c.isPlayed && c.turnBought < gameState.turn
+              );
+              if (!hand.length) return null;
+              const canPlay = !gameState.devCardPlayedThisTurn;
+              const cnt = (t: string) => hand.filter(c => (c.type as string) === t).length;
+              return (
+                <div className="space-y-1.5 border-t border-slate-600 pt-2">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">
+                    Dev Cards{!canPlay && <span className="text-yellow-500 normal-case ml-1">(1/turn used)</span>}
+                  </p>
+                  {cnt('knight') > 0 && (
+                    <button disabled={!canPlay} onClick={() => onAction('play-knight')}
+                      className="w-full py-1.5 bg-orange-700 hover:bg-orange-600 disabled:opacity-40 text-white text-sm rounded flex items-center justify-center gap-1">
+                      ⚔️ Knight ×{cnt('knight')}
+                    </button>
+                  )}
+                  {cnt('road-building') > 0 && (
+                    <button disabled={!canPlay} onClick={() => onAction('play-road-building')}
+                      className="w-full py-1.5 bg-amber-700 hover:bg-amber-600 disabled:opacity-40 text-white text-sm rounded flex items-center justify-center gap-1">
+                      🛣️ Road Building ×{cnt('road-building')}
+                    </button>
+                  )}
+                  {cnt('year-of-plenty') > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex gap-1">
+                        <select value={yopR1} onChange={e => setYopR1(e.target.value as ResourceType)}
+                          className="flex-1 text-xs bg-slate-700 border border-slate-500 rounded px-1 py-1 text-white">
+                          {RESOURCES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <select value={yopR2} onChange={e => setYopR2(e.target.value as ResourceType)}
+                          className="flex-1 text-xs bg-slate-700 border border-slate-500 rounded px-1 py-1 text-white">
+                          {RESOURCES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                      <button disabled={!canPlay} onClick={() => onAction('play-year-of-plenty', { r1: yopR1, r2: yopR2 })}
+                        className="w-full py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white text-sm rounded flex items-center justify-center gap-1">
+                        🌾 Year of Plenty ×{cnt('year-of-plenty')}
+                      </button>
+                    </div>
+                  )}
+                  {cnt('monopoly') > 0 && (
+                    <div className="space-y-1">
+                      <select value={monoRes} onChange={e => setMonoRes(e.target.value as ResourceType)}
+                        className="w-full text-xs bg-slate-700 border border-slate-500 rounded px-2 py-1 text-white">
+                        {RESOURCES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <button disabled={!canPlay} onClick={() => onAction('play-monopoly', monoRes)}
+                        className="w-full py-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm rounded flex items-center justify-center gap-1">
+                        💰 Monopoly ×{cnt('monopoly')}
+                      </button>
+                    </div>
+                  )}
+                  {cnt('victory-point') > 0 && (
+                    <p className="text-xs text-yellow-400 text-center">⭐ {cnt('victory-point')}× VP (auto-reveals on win)</p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* End turn */}
             <button
@@ -315,73 +562,67 @@ function ActionPanel({ gameState, onAction, rolling }: ActionPanelProps) {
 
       {/* Dice display */}
       {gameState.diceRoll && (
-        <div className="mt-4 pt-4 border-t border-slate-700">
-          <div className="flex items-center justify-center gap-4">
-            {DiceIcons[gameState.diceRoll[0] - 1] && (
-              <>
-                {(() => {
-                  const Icon1 = DiceIcons[gameState.diceRoll[0] - 1];
-                  const Icon2 = DiceIcons[gameState.diceRoll[1] - 1];
-                  return (
-                    <>
-                      <Icon1 className="w-12 h-12 text-white" />
-                      <span className="text-2xl text-slate-400">+</span>
-                      <Icon2 className="w-12 h-12 text-white" />
-                      <span className="text-2xl text-slate-400">=</span>
-                      <span className="text-3xl font-bold text-white">
-                        {gameState.diceRoll[0] + gameState.diceRoll[1]}
-                      </span>
-                    </>
-                  );
-                })()}
-              </>
-            )}
-          </div>
+        <div className="mt-4 pt-4 border-t border-slate-700 flex justify-center">
+          <CatanDice values={gameState.diceRoll} rollKey={rollKey} />
         </div>
       )}
     </div>
   );
 }
 
-// ============================================================================
-// RESOURCE PANEL
-// ============================================================================
-
 interface ResourcePanelProps {
   player: Player;
+  gameState: GameState;
 }
 
-function ResourcePanel({ player }: ResourcePanelProps) {
+function ResourcePanel({ player, gameState }: ResourcePanelProps) {
+  const summary = computeResourceSummary(gameState, player.id);
+  const rateColor = (r: number) =>
+    r === 2 ? 'text-green-400' : r === 3 ? 'text-yellow-400' : 'text-slate-600';
+
   return (
     <div className="bg-slate-800/90 rounded-xl p-4 border border-slate-700">
       <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
         <Package className="w-5 h-5 text-green-400" />
         Your Resources
+        <span className="ml-auto text-xs text-slate-400 font-normal">{summary.totalCards} cards</span>
       </h3>
       <div className="grid grid-cols-5 gap-2">
         {(Object.entries(player.resources) as [ResourceType, number][]).map(([resource, count]) => (
-          <div 
+          <div
             key={resource}
-            className="bg-slate-700/50 rounded-lg p-2 text-center"
+            className={`bg-slate-700/50 rounded-lg p-2 text-center ${count > 0 ? 'ring-1 ring-white/10' : ''}`}
           >
             <div className="flex justify-center mb-1">
               {ResourceIcons[resource]}
             </div>
-            <div className="text-white font-bold">{count}</div>
-            <div className="text-xs text-slate-400 capitalize">{resource}</div>
+            <div className={`font-bold ${count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</div>
+            <div className="text-[9px] text-slate-500 capitalize">{resource}</div>
+            <div className={`text-[9px] font-bold ${rateColor(summary.maritimeRates[resource])}`}>
+              {summary.maritimeRates[resource]}:1
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Building costs reference */}
-      <div className="mt-4 pt-4 border-t border-slate-700">
-        <h4 className="text-sm font-semibold text-slate-400 mb-2">Building Costs:</h4>
-        <div className="text-xs text-slate-500 space-y-1">
-          <div>🛤️ Road: 1 Wood + 1 Brick</div>
-          <div>🏠 Settlement: 1 Wood + 1 Brick + 1 Sheep + 1 Wheat</div>
-          <div>🏙️ City: 2 Wheat + 3 Ore</div>
-          <div>📜 Dev Card: 1 Sheep + 1 Wheat + 1 Ore</div>
-        </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {([
+          { label: '🛤️ Road',       can: summary.canAfford.road },
+          { label: '🏠 Settlement', can: summary.canAfford.settlement },
+          { label: '🏙️ City',       can: summary.canAfford.city },
+          { label: '📜 Dev Card',   can: summary.canAfford.devCard },
+        ] as { label: string; can: boolean }[]).map(({ label, can }) => (
+          <span
+            key={label}
+            className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+              can
+                ? 'bg-green-900/60 text-green-300 ring-1 ring-green-600/40'
+                : 'bg-slate-700/40 text-slate-600'
+            }`}
+          >
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -393,6 +634,11 @@ function ResourcePanel({ player }: ResourcePanelProps) {
 
 export default function CatanGamePage() {
   const mp = useMultiplayerGame<GameState>();
+
+  // ── Lobby ──────────────────────────────────────────────────────────────────
+  const [showLobby, setShowLobby] = useState(!mp.isMultiplayer);
+  const [difficulty, setDifficulty] = useState<AIDifficulty>('standard');
+  const [aiPlayerIds, setAiPlayerIds] = useState<string[]>([]);
   
   const [gameState, setGameState] = useState<GameState>(() => {
     if (mp.isMultiplayer && mp.playerNames.length > 0) {
@@ -402,6 +648,70 @@ export default function CatanGamePage() {
   });
   const [rolling, setRolling] = useState(false);
   const [buildMode, setBuildMode] = useState<'settlement' | 'city' | 'road' | null>(null);
+  const [cameraMode, setCameraMode] = useState<CameraMode>('tactical');
+  const [rollKey, setRollKey] = useState(0);
+  const [productionLog, setProductionLog] = useState<ProductionEntry[]>([]);
+  const [showTradePanel, setShowTradePanel] = useState(false);
+  // ── Sounds ────────────────────────────────────────────────────────────────
+  useCatanSounds({ gameState });
+
+  // ── Persistence (save / load / undo) ─────────────────────────────────────
+  const { pushHistory, undo, canUndo, saveGame, loadGame, hasSave } = useCatanPersistence();
+
+  // ── AI ────────────────────────────────────────────────────────────────────
+  const humanIds = gameState.players
+    .filter(p => !aiPlayerIds.includes(p.id))
+    .map(p => p.id);
+  const { triggerAITurn } = useCatanAI({
+    setGameState,
+    difficulty,
+    humanPlayerIds: humanIds,
+  });
+
+  // Auto-trigger AI when it's an AI player's turn
+  useEffect(() => {
+    const current = getCurrentPlayer(gameState);
+    if (aiPlayerIds.includes(current.id) && gameState.phase !== 'game-over') {
+      const delay = setTimeout(() => triggerAITurn(gameState), 600);
+      return () => clearTimeout(delay);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.currentPlayerIndex, gameState.phase]);
+
+  // ── Lobby start handler ───────────────────────────────────────────────────
+  const handleLobbyStart = useCallback((config: LobbyConfig) => {
+    const playerNames = config.players.map(p => p.name);
+    const initialState = createInitialGameState(
+      mp.isMultiplayer && mp.playerNames.length > 0 ? mp.playerNames : playerNames
+    );
+    // Override player colors from lobby config
+    const stateWithColors = {
+      ...initialState,
+      players: initialState.players.map((p, i) => ({
+        ...p,
+        color: config.players[i]?.color ?? p.color,
+      })),
+    };
+    const aiIds = config.players
+      .filter(p => p.isAI)
+      .map((_, i) => stateWithColors.players[i]?.id)
+      .filter((id): id is string => !!id);
+    setAiPlayerIds(aiIds);
+    setDifficulty(config.difficulty);
+    setGameState(stateWithColors);
+    pushHistory(stateWithColors);
+    setBuildMode(null);
+    setShowLobby(false);
+  }, [mp.isMultiplayer, mp.playerNames, pushHistory]);
+
+  // ── Presence signaling bridge ────────────────────────────────────────────
+  const presenceSendRef = useRef<((msg: unknown) => void) | null>(null);
+  useEffect(() => {
+    mp.registerSignalHandler((_fromPlayerId, signal) => {
+      presenceSendRef.current?.(signal);
+    });
+    return () => mp.registerSignalHandler(null);
+  }, [mp]);
 
   // Multiplayer: sync state to remote players when host changes it
   useEffect(() => {
@@ -421,11 +731,49 @@ export default function CatanGamePage() {
     switch (action) {
       case 'roll':
         setRolling(true);
+        setRollKey(k => k + 1);
+        setProductionLog([]);
+        
+        // Play distinct, physically accurate satisfying dice roll sound
+        const rollAudio = new Audio('https://actions.google.com/sounds/v1/foley/rolling_dice.ogg');
+        rollAudio.volume = 0.7;
+        rollAudio.play().catch(() => {});
+
         setTimeout(() => {
-          setGameState(prev => performRoll(prev));
+          setGameState(prev => {
+            const next = performRoll(prev);
+            pushHistory(next);
+            if (next.diceRoll) {
+              const total = next.diceRoll[0] + next.diceRoll[1];
+              if (total !== 7) setProductionLog(computeProduction(prev, total));
+            }
+            return next;
+          });
           setRolling(false);
         }, 800);
         break;
+
+      case 'undo': {
+        const prev = undo();
+        if (prev) {
+          setGameState(prev);
+          setBuildMode(null);
+        }
+        break;
+      }
+
+      case 'save':
+        saveGame(gameState);
+        break;
+
+      case 'load': {
+        const saved = loadGame();
+        if (saved) {
+          setGameState(saved.state);
+          setBuildMode(null);
+        }
+        break;
+      }
 
       case 'end-turn':
         setGameState(prev => endTurn(prev));
@@ -482,15 +830,27 @@ export default function CatanGamePage() {
         setGameState(prev => playRoadBuilding(prev, getCurrentPlayer(prev).id));
         break;
 
+      case 'discard':
+        if (data && typeof data === 'object') {
+          setGameState(prev => {
+            const discIdx = prev.discardingPlayerIndex ?? 0;
+            const playerId = prev.players[discIdx]?.id;
+            if (!playerId) return prev;
+            return discardResources(prev, playerId, data as Record<ResourceType, number>);
+          });
+        }
+        break;
+
       case 'new-game':
-        setGameState(createInitialGameState(['Red', 'Blue', 'Orange', 'White']));
+        setShowLobby(true);
         setBuildMode(null);
         break;
 
       default:
         break;
     }
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, undo, saveGame, loadGame, pushHistory]);
 
   const handleHexClick = useCallback((hexId: number) => {
     if (gameState.phase === 'robber-move') {
@@ -561,9 +921,38 @@ export default function CatanGamePage() {
   const showEdgeTargets = buildMode === 'road' || gameState.phase === 'setup-road' || gameState.freeRoadsRemaining > 0;
 
   const currentPlayer = getCurrentPlayer(gameState);
+  const uiProjection = computeUIProjection(gameState, currentPlayer.id);
+  const diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
+  const phaseHelp = (() => {
+    switch (gameState.phase) {
+      case 'setup-settlement':
+        return 'Setup phase: choose a highlighted intersection for your starting settlement.';
+      case 'setup-road':
+        return 'Setup phase: place a road connected to the settlement you just placed.';
+      case 'roll':
+        return 'Roll is available now. After the roll, production or robber flow resolves automatically.';
+      case 'discard':
+        return 'A 7 was rolled. Players above the hand limit must discard before the robber moves.';
+      case 'robber-move':
+        return 'Select a destination hex for the robber. The current robber hex is blocked.';
+      case 'robber-steal':
+        return 'Choose one adjacent opponent to steal a random resource from.';
+      case 'main':
+        return 'Main phase: build, trade, play an eligible development card, or end your turn.';
+      case 'game-over':
+        return 'The match is over.';
+      default:
+        return 'Follow the current phase prompt to continue the match.';
+    }
+  })();
+
+  // ── Lobby gate ────────────────────────────────────────────────────────────
+  if (showLobby) {
+    return <CatanLobby onStart={handleLobbyStart} />;
+  }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-gradient-to-br from-blue-950 via-cyan-950 to-emerald-950">
+    <div className="h-[100dvh] w-screen overflow-hidden relative bg-gradient-to-br from-blue-950 via-cyan-950 to-emerald-950 select-none">
       {/* === FULL-SCREEN 3D BOARD === */}
       <div className="absolute inset-0 z-0">
         <CatanBoard3D
@@ -574,52 +963,112 @@ export default function CatanGamePage() {
         />
       </div>
 
-      {/* === FLOATING HEADER === */}
-      <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-3 pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 border border-white/10">
-            <Link to="/dashboard" className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-              <ArrowLeft className="w-5 h-5 text-slate-300" />
+      {/* === FLOATING HEADER — safe-area aware, compact on mobile === */}
+      <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none safe-top">
+        <div className="flex items-center justify-between px-2 sm:px-4 py-1.5 sm:py-2 gap-2">
+          {/* Back + title */}
+          <div className="flex items-center gap-2 pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 border border-white/10 min-w-0">
+            <Link to="/dashboard" className="p-1 sm:p-1.5 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0">
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-300" />
             </Link>
-            <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
-              <Map className="w-5 h-5 text-white" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Map className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">Settlers of Catan</h1>
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-lg font-bold text-white truncate">Settlers of Catan</h1>
               <p className="text-xs text-slate-400">Turn {gameState.turn}</p>
             </div>
           </div>
 
-          <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 border border-white/10 flex items-center gap-2 text-sm text-slate-300">
-            <ScrollText className="w-4 h-4" />
-            {gameState.developmentCardDeck.length} cards remaining
+          {/* Camera mode switcher — hidden on small phones, visible from sm */}
+          <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2 sm:px-3 py-1 sm:py-1.5 border border-white/10 hidden xs:flex items-center gap-0.5 sm:gap-1">
+            {(['tactical', 'table', 'inspect', 'cinematic'] as CameraMode[]).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setCameraMode(mode)}
+                className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-xs font-semibold transition-all capitalize ${
+                  cameraMode === mode
+                    ? 'bg-orange-500 text-white shadow-md shadow-orange-500/40'
+                    : 'text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                {/* Abbreviate on narrow screens */}
+                <span className="hidden sm:inline">{mode}</span>
+                <span className="sm:hidden">{mode[0].toUpperCase()}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Save / Load / Undo */}
+          <div className="pointer-events-auto flex items-center gap-1 bg-black/60 backdrop-blur-md rounded-xl px-2 py-1.5 border border-white/10">
+            <button
+              onClick={() => handleAction('undo')}
+              disabled={!canUndo()}
+              title="Undo last action"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => handleAction('save')}
+              title="Save game"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            {hasSave() && (
+              <button
+                onClick={() => handleAction('load')}
+                title="Load saved game"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <FolderOpen className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 border border-white/10 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-slate-300 flex-shrink-0">
+            <ScrollText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">{gameState.developmentCardDeck.length} cards</span>
+            <span className="sm:hidden">{gameState.developmentCardDeck.length}</span>
           </div>
         </div>
 
         {/* Build Mode / Free Roads floating banner */}
         {(buildMode || gameState.freeRoadsRemaining > 0) && (
           <div className="flex justify-center mt-1 pointer-events-auto">
-            <div className={`px-6 py-2 rounded-xl text-sm font-semibold ${
+            <div className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold ${
               gameState.freeRoadsRemaining > 0
                 ? 'bg-green-600/80 text-white border border-green-400/30'
                 : 'bg-yellow-600/80 text-white border border-yellow-400/30'
             } backdrop-blur-md`}>
               {gameState.freeRoadsRemaining > 0
                 ? `Road Building: Place ${gameState.freeRoadsRemaining} free road${gameState.freeRoadsRemaining > 1 ? 's' : ''}`
-                : `Build Mode: Click to place a ${buildMode}`}
+                : `Build Mode: place a ${buildMode}`}
               {buildMode && (
                 <button onClick={() => setBuildMode(null)} className="ml-3 underline opacity-80 hover:opacity-100">Cancel</button>
               )}
             </div>
           </div>
         )}
+
+        <div className="flex justify-center mt-1 px-2 sm:px-4 pointer-events-none">
+          <div className="max-w-3xl w-full bg-black/45 backdrop-blur-md rounded-xl border border-white/10 px-3 sm:px-4 py-2 text-center">
+            <div className="text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-white/35 font-bold">
+              {uiProjection.phaseLabel}
+            </div>
+            <div className="text-xs sm:text-sm text-white/78 mt-0.5">
+              {phaseHelp}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* === LEFT PANEL — Players (floating) === */}
-      <div className="absolute left-3 top-20 w-64 z-20 pointer-events-auto overflow-y-auto max-h-[calc(100vh-6rem)]">
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-3 space-y-2">
-          <h2 className="text-sm font-bold text-white/80 flex items-center gap-2 px-1">
-            <Users className="w-4 h-4 text-blue-400" />
+      {/* === LEFT PANEL — Players (floating, collapses on mobile) === */}
+      <div className="absolute left-1.5 sm:left-3 top-16 sm:top-20 w-48 sm:w-64 z-20 pointer-events-auto overflow-y-auto max-h-[calc(100dvh-5rem)] sm:max-h-[calc(100dvh-6rem)]">
+        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+          <h2 className="text-xs sm:text-sm font-bold text-white/80 flex items-center gap-1.5 sm:gap-2 px-1">
+            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
             Players
           </h2>
           {gameState.players.map(player => (
@@ -627,24 +1076,125 @@ export default function CatanGamePage() {
               key={player.id}
               player={player}
               isCurrentPlayer={player.id === currentPlayer.id}
+              isAI={aiPlayerIds.includes(player.id)}
+              currentTurn={gameState.turn}
+              gameState={gameState}
             />
           ))}
         </div>
       </div>
 
       {/* === RIGHT PANEL — Actions & Resources (floating) === */}
-      <div className="absolute right-3 top-20 w-72 z-20 pointer-events-auto overflow-y-auto max-h-[calc(100vh-6rem)] space-y-3">
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-3">
+      {/* On mobile: anchored to bottom as a compact strip; on desktop: right side panel */}
+      <div className="absolute right-1.5 sm:right-3 bottom-16 sm:bottom-auto sm:top-20 w-[calc(100vw-8.5rem)] sm:w-72 z-20 pointer-events-auto overflow-y-auto max-h-[50vh] sm:max-h-[calc(100dvh-6rem)] space-y-2 sm:space-y-3">
+        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3">
           <ActionPanel 
             gameState={gameState} 
             onAction={handleAction}
             rolling={rolling}
+            rollKey={rollKey}
+            onOpenTrade={() => setShowTradePanel(true)}
           />
         </div>
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-3">
-          <ResourcePanel player={currentPlayer} />
+        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3">
+          <ResourcePanel player={currentPlayer} gameState={gameState} />
+        </div>
+        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-white/45 font-bold">
+            <span>Dice Flow</span>
+            <span className={gameState.phase === 'roll' ? 'text-amber-300' : 'text-white/35'}>
+              {gameState.phase === 'roll' ? 'Ready' : gameState.diceRoll ? 'Resolved' : 'Waiting'}
+            </span>
+          </div>
+          {diceVisible ? (
+            <div className="flex flex-col items-center gap-2">
+              <CatanDice values={gameState.diceRoll ?? [1, 1]} rollKey={rollKey} />
+              <p className="text-[11px] text-center text-slate-300 leading-relaxed">
+                {gameState.phase === 'roll'
+                  ? 'Press Roll Dice in the Actions panel to begin the turn.'
+                  : gameState.diceRoll
+                    ? `Latest total: ${gameState.diceRoll[0] + gameState.diceRoll[1]}.`
+                    : 'Dice will become active when the turn reaches the roll phase.'}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Dice are intentionally hidden during the initial settlement/road setup because no roll is allowed yet.
+            </p>
+          )}
         </div>
       </div>
+
+      {/* === FLOATING DICE OVERLAY — prominent center-screen roll result === */}
+      {gameState.diceRoll && gameState.phase !== 'setup-settlement' && gameState.phase !== 'setup-road' && (
+        <div className="absolute bottom-20 sm:bottom-8 left-1/2 -translate-x-1/2 z-30 pointer-events-none select-none">
+          <div className="bg-black/80 backdrop-blur-md rounded-2xl px-6 py-4 border border-white/15 shadow-2xl flex flex-col items-center gap-2">
+            <p className="text-[10px] text-white/45 font-semibold uppercase tracking-widest">
+              {currentPlayer.name} rolled
+            </p>
+            <CatanDice values={gameState.diceRoll} rollKey={rollKey} />
+            {gameState.diceRoll[0] + gameState.diceRoll[1] === 7 && (
+              <p className="text-amber-400 text-xs font-bold tracking-wide animate-pulse">⚠ Robber activated!</p>
+            )}
+            {productionLog.length > 0 && (
+              <div className="w-full border-t border-white/10 pt-2 mt-1 space-y-1 min-w-[180px]">
+                {productionLog.map((entry, i) => (
+                  <div key={i} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-white/60 truncate">{entry.playerName}</span>
+                    <span className={`font-bold text-white px-1.5 py-0.5 rounded text-[10px] ${ResourceColors[entry.resource]}`}>
+                      +{entry.amount} {entry.resource}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* === TURN BANNER — top-centre current player + phase indicator === */}
+      {gameState.phase !== 'game-over' && (
+        <div className="absolute top-14 sm:top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none select-none">
+          <div
+            className="flex items-center gap-2 bg-black/65 backdrop-blur-sm rounded-full px-3 sm:px-4 py-1 sm:py-1.5 border"
+            style={{ borderColor: currentPlayer.color + '99' }}
+          >
+            <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full animate-pulse" style={{ background: currentPlayer.color }} />
+            <span className="text-white text-xs sm:text-sm font-semibold whitespace-nowrap">
+              {currentPlayer.name}{aiPlayerIds.includes(currentPlayer.id) ? ' 🤖' : ''}
+            </span>
+            <span className="text-white/30 text-xs">·</span>
+            <span className="text-white/55 text-xs">{uiProjection.phaseLabel}</span>
+          </div>
+        </div>
+      )}
+
+      {/* === TRADE PANEL === */}
+      <AnimatePresence>
+        {showTradePanel && (
+          <Suspense fallback={null}>
+            <CatanTradePanel
+              gameState={gameState}
+              currentPlayerId={currentPlayer.id}
+              onStateChange={(s) => { setGameState(s); setShowTradePanel(false); }}
+              onClose={() => setShowTradePanel(false)}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
+
+      {/* === TELEPRESENCE PANEL — WebRTC T1 video panels (multiplayer only) === */}
+      {mp.isMultiplayer && (
+        <CatanPresence
+          localPlayerId={mp.playerId ?? 'local'}
+          players={gameState.players.map(p => ({ id: p.id, name: p.name, color: p.color }))}
+          sendSignal={(msg) => mp.sendSignal(msg)}
+          onSignal={(handler) => {
+            presenceSendRef.current = handler as unknown as (msg: unknown) => void;
+            return () => { presenceSendRef.current = null; };
+          }}
+        />
+      )}
     </div>
   );
 }
