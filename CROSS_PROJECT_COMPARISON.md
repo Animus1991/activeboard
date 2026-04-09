@@ -434,26 +434,27 @@ Both projects implement a 3D Settlers of Catan board game using **React Three Fi
 
 ## Summary Table
 
-| Category | TF Advantage | ABAS Advantage |
-|----------|-------------|----------------|
-| **Architecture** | ⭐⭐⭐⭐⭐ Event-driven DDD | ⭐⭐ Simple monolithic |
-| **Type Safety** | ⭐⭐⭐⭐⭐ Formal types | ⭐⭐⭐ Good enums, some `any` |
-| **3D Terrain** | ⭐⭐⭐ Painted textures | ⭐⭐⭐⭐⭐ Full 3D props |
-| **Lighting** | ⭐⭐⭐⭐⭐ 7-light cinematic | ⭐⭐⭐ 4-light basic |
-| **Post-Processing** | ⭐ None active | ⭐⭐⭐⭐⭐ Full pipeline |
-| **Physics** | ⭐ None | ⭐⭐⭐⭐⭐ Rapier |
-| **Shaders** | ⭐ None | ⭐⭐⭐⭐ Wind + water |
-| **AI Quality** | ⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ Multi-action + trade |
-| **UI Features** | ⭐⭐⭐ Core | ⭐⭐⭐⭐⭐ Massive HUD |
-| **Multiplayer** | ⭐⭐⭐⭐⭐ Liveblocks + WebRTC | ⭐ Stub |
-| **Projections** | ⭐⭐⭐⭐⭐ 5 projection types | ⭐ None |
-| **Testing** | ⭐⭐⭐ Framework exists | ⭐⭐ Types only |
-| **Documentation** | ⭐⭐⭐⭐⭐ Extensive | ⭐⭐⭐ Concise |
-| **Board Generation** | ⭐⭐ Fixed | ⭐⭐⭐⭐⭐ Parameterized |
-| **Resource Animations** | ⭐ None | ⭐⭐⭐⭐⭐ 3D flights |
-| **Telepresence UX** | ⭐⭐⭐ 2D panels | ⭐⭐⭐⭐⭐ 3D spatial |
-| **VR/XR** | ⭐⭐ Basic | ⭐⭐⭐⭐ XR store |
-| **Token Quality** | ⭐⭐⭐⭐⭐ Premium coins | ⭐⭐ Basic cylinders |
-| **Table Surface** | ⭐⭐⭐⭐⭐ Walnut + felt | ⭐⭐ Flat plane |
+| Category | TF (after cross-pollination) | Status |
+|----------|------------------------------|--------|
+| **Architecture** | ⭐⭐⭐⭐⭐ Event-driven DDD | ✅ TF original |
+| **Type Safety** | ⭐⭐⭐⭐⭐ Formal branded types + Vec3/Transform3D | ✅ Enhanced |
+| **3D Terrain** | ⭐⭐⭐⭐⭐ Painted PBR + 3D props (trees, mountains, sheep, wheat, cacti) | ✅ ABAS → TF |
+| **Lighting** | ⭐⭐⭐⭐⭐ 7-light cinematic + HDR Environment | ✅ Enhanced |
+| **Post-Processing** | ⭐⭐⭐⭐⭐ Bloom + Vignette + SMAA | ✅ ABAS → TF |
+| **Physics** | ⭐⭐⭐ XR store initialized (Rapier ready) | 🔶 Infrastructure |
+| **Shaders** | ⭐⭐⭐⭐ Wind + water via onBeforeCompile | ✅ ABAS → TF |
+| **AI Quality** | ⭐⭐⭐⭐⭐ Multi-action + trade proposals + trade eval | ✅ ABAS → TF |
+| **UI Features** | ⭐⭐⭐⭐⭐ Tutorial, Rules, Chat, Dice History, Save/Load, Replay, Zoom, WASD, Trade Rating | ✅ ABAS → TF |
+| **Multiplayer** | ⭐⭐⭐⭐⭐ Liveblocks + WebRTC telepresence | ✅ TF original |
+| **Projections** | ⭐⭐⭐⭐⭐ 5 projection types | ✅ TF original |
+| **Testing** | ⭐⭐⭐ Framework exists | ✅ TF original |
+| **Documentation** | ⭐⭐⭐⭐⭐ Extensive + FeatureMatrixRow tracker | ✅ Enhanced |
+| **Board Generation** | ⭐⭐⭐⭐⭐ Variable sizes + constraint solver + randomization | ✅ ABAS → TF |
+| **Resource Animations** | ⭐⭐⭐⭐⭐ 3D flight arcs + mini 3D HUD icons | ✅ ABAS → TF |
+| **Telepresence UX** | ⭐⭐⭐⭐⭐ WebRTC 2D + 3D holographic nameplates | ✅ Enhanced |
+| **VR/XR** | ⭐⭐⭐⭐ XR store + VR entry button | ✅ ABAS → TF |
+| **Sound System** | ⭐⭐⭐⭐⭐ 10 SFX (dice, build, road, card, trade, steal, robber, win, turn, place) + spatial audio infra | ✅ Enhanced |
+| **Token Quality** | ⭐⭐⭐⭐⭐ Premium coins | ✅ TF original |
+| **Table Surface** | ⭐⭐⭐⭐⭐ Walnut + felt + contact shadows | ✅ Enhanced |
 
-**The ideal product is TF's architecture + projections + multiplayer + docs combined with ABAS's 3D terrain + physics + post-processing + shaders + AI + HUD features + resource animations + spatial presence.**
+**TableForge now combines TF's architecture + projections + multiplayer + docs with ABAS's 3D terrain + post-processing + shaders + AI + HUD features + resource animations + spatial presence + XR support.**

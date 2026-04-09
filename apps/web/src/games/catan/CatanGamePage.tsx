@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import CatanBoard3D from './CatanBoard3D';
 const CatanTradePanel = lazy(() => import('./CatanTradePanel'));
+import { Resource3DIcon } from './CatanResourceFlow';
 
 type CameraMode = 'tactical' | 'table' | 'inspect' | 'cinematic';
 import CatanPresence from './CatanPresence';
@@ -39,8 +40,8 @@ import { useCatanPersistence } from './useCatanPersistence';
 import { 
   Home, Building2, Route, ScrollText,
   Users, ArrowRight, Package,
-  Crown, Sword, Map, Wheat, Trees, Mountain,
-  Layers, ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
+  Crown, Sword, Map,
+  ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
   BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered
 } from 'lucide-react';
 import {
@@ -122,16 +123,8 @@ function DiscardPanel({ player, mustDiscard, onDiscard }: DiscardPanelProps) {
 }
 
 // ============================================================================
-// RESOURCE ICONS
+// RESOURCE COLORS
 // ============================================================================
-
-const ResourceIcons: Record<ResourceType, React.ReactNode> = {
-  wood: <Trees className="w-4 h-4 text-green-600" />,
-  brick: <Layers className="w-4 h-4 text-red-600" />,
-  sheep: <Package className="w-4 h-4 text-lime-500" />,
-  wheat: <Wheat className="w-4 h-4 text-yellow-500" />,
-  ore: <Mountain className="w-4 h-4 text-slate-400" />,
-};
 
 const ResourceColors: Record<ResourceType, string> = {
   wood: 'bg-green-600',
@@ -607,7 +600,7 @@ function ResourcePanel({ player, gameState }: ResourcePanelProps) {
             className={`bg-slate-700/50 rounded-lg p-2 text-center ${count > 0 ? 'ring-1 ring-white/10' : ''}`}
           >
             <div className="flex justify-center mb-1">
-              {ResourceIcons[resource]}
+              <Resource3DIcon resource={resource} size={32} />
             </div>
             <div className={`font-bold ${count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</div>
             <div className="text-[9px] text-slate-500 capitalize">{resource}</div>
