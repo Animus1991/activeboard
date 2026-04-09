@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRight, Handshake, Building2 } from 'lucide-react';
+import { evaluateTradeOffer } from './useCatanAI';
 import {
   type GameState,
   type ResourceType,
@@ -146,6 +147,17 @@ export default function CatanTradePanel({ gameState, currentPlayerId, onStateCha
                     <div className="flex items-center gap-2 text-blue-300 font-bold text-sm">
                       <Handshake size={16} /> Incoming trade from {gameState.players.find(p => p.id === pending.fromPlayerId)?.name}
                     </div>
+                    {/* AI Trade Fairness Rating */}
+                    {(() => {
+                      const rating = evaluateTradeOffer(gameState, currentPlayerId, pending.requesting, pending.offering, 'standard');
+                      const label = rating.score > 1 ? '🟢 Great Deal' : rating.score > -0.3 ? '🟡 Fair' : '🔴 Bad Deal';
+                      const color = rating.score > 1 ? 'bg-green-800/60 text-green-300' : rating.score > -0.3 ? 'bg-yellow-800/60 text-yellow-300' : 'bg-red-800/60 text-red-300';
+                      return (
+                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${color}`}>
+                          {label} <span className="opacity-60">({rating.score > 0 ? '+' : ''}{rating.score.toFixed(1)})</span>
+                        </div>
+                      );
+                    })()}
                     <div className="flex items-center gap-4 flex-wrap">
                       <div className="flex flex-col items-center gap-1">
                         <span className="text-white/40 text-[9px] uppercase">They offer</span>

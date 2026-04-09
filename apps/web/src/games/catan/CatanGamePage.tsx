@@ -29,6 +29,8 @@ import {
   DiceHistoryChart,
   ResourceGainNotifications,
   ZoomControls,
+  SaveLoadPanel,
+  ReplayControls,
   type ChatMessage,
   type ResourceGain,
 } from './CatanHUDFeatures';
@@ -39,7 +41,7 @@ import {
   Users, ArrowRight, Package,
   Crown, Sword, Map, Wheat, Trees, Mountain,
   Layers, ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
-  BookOpen, MessageSquare, BarChart3, HelpCircle
+  BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered
 } from 'lucide-react';
 import {
   type GameState,
@@ -672,6 +674,10 @@ export default function CatanGamePage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [diceHistory, setDiceHistory] = useState<number[]>([]);
   const [resourceGains, setResourceGains] = useState<ResourceGain[]>([]);
+  const [showSaveLoad, setShowSaveLoad] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [replayPlaying, setReplayPlaying] = useState(false);
 
   // ── Sounds ────────────────────────────────────────────────────────────────
   useCatanSounds({ gameState });
@@ -1089,6 +1095,20 @@ export default function CatanGamePage() {
             >
               <BarChart3 className="w-4 h-4" />
             </button>
+            <button
+              onClick={() => setShowSaveLoad(v => !v)}
+              title="Save / Load"
+              className={`p-1.5 rounded-lg transition-colors ${showSaveLoad ? 'text-purple-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <Save className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => { setShowReplay(v => !v); setReplayIndex(gameState.log.length - 1); }}
+              title="Replay Log"
+              className={`p-1.5 rounded-lg transition-colors ${showReplay ? 'text-cyan-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+            >
+              <ListOrdered className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 border border-white/10 flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-slate-300 flex-shrink-0">
@@ -1280,6 +1300,26 @@ export default function CatanGamePage() {
         currentPlayerId={currentPlayer.id}
       />
       <DiceHistoryChart isOpen={showDiceHistory} onClose={() => setShowDiceHistory(false)} history={diceHistory} />
+      <SaveLoadPanel
+        isOpen={showSaveLoad}
+        onClose={() => setShowSaveLoad(false)}
+        onSave={() => saveGame(gameState)}
+        onLoad={() => {
+          const saved = loadGame();
+          if (saved) { setGameState(saved.state); setBuildMode(null); }
+        }}
+        hasSave={hasSave()}
+      />
+      <ReplayControls
+        isActive={showReplay}
+        log={gameState.log}
+        currentIndex={replayIndex}
+        onStep={setReplayIndex}
+        onPlay={() => setReplayPlaying(true)}
+        onPause={() => setReplayPlaying(false)}
+        onClose={() => { setShowReplay(false); setReplayPlaying(false); }}
+        isPlaying={replayPlaying}
+      />
       <ResourceGainNotifications gains={resourceGains} />
       <ZoomControls
         onZoomIn={() => {/* OrbitControls zoom handled by scroll — placeholder for programmatic zoom */}}

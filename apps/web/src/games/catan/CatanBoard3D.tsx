@@ -8,6 +8,7 @@ import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, SMAA } from '@react-three/postprocessing';
+import { useKeyboardControls } from './CatanHUDFeatures';
 import * as THREE from 'three';
 import {
   type GameState,
@@ -1522,6 +1523,9 @@ interface BoardContentProps {
 }
 
 function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
+  const orbitRef = useRef<any>(null);
+  useKeyboardControls(orbitRef);
+
   const getPlayerColor = (playerId: string): string => {
     return gameState.players.find(p => p.id === playerId)?.color || '#888';
   };
@@ -1583,7 +1587,7 @@ function BoardContent({ gameState, onHexClick, onVertexClick, onEdgeClick }: Boa
 
       {/* Camera */}
       <PerspectiveCamera makeDefault position={[0, 19, 4.5]} fov={38} />
-      <OrbitControls enablePan enableZoom enableRotate minDistance={5} maxDistance={28} maxPolarAngle={Math.PI / 2.1} minPolarAngle={0.10} />
+      <OrbitControls ref={orbitRef} enablePan enableZoom enableRotate minDistance={5} maxDistance={28} maxPolarAngle={Math.PI / 2.1} minPolarAngle={0.10} />
 
       {/* Background */}
       <color attach="background" args={['#07101E']} />

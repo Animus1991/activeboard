@@ -354,23 +354,100 @@ export interface CatanDomainEvent {
 }
 
 // ============================================================
-// 12. FEATURE COMPLETENESS MATRIX (documentation)
+// 12. SPATIAL TYPES (3D positions on domain entities)
 // ============================================================
+
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Transform3D {
+  position: Vec3;
+  rotation?: Vec3;
+  scale?: Vec3;
+}
+
+export interface SpatialHex {
+  hexId: HexId;
+  worldPosition: Vec3;
+  corners: Vec3[]; // 6 corner positions in world space
+}
+
+export interface SpatialVertex {
+  vertexId: VertexId;
+  worldPosition: Vec3;
+}
+
+export interface SpatialEdge {
+  edgeId: EdgeId;
+  worldStart: Vec3;
+  worldEnd: Vec3;
+  midpoint: Vec3;
+  angle: number;
+}
+
+// ============================================================
+// 13. FEATURE COMPLETENESS MATRIX (documentation)
+// ============================================================
+
+export interface FeatureMatrixRow {
+  /** Frontend UI component exists */
+  fe: boolean;
+  /** Domain event type defined */
+  event: boolean;
+  /** Reducer handler implemented */
+  reducer: boolean;
+  /** Projection layer derives state */
+  projection: boolean;
+  /** 3D render component exists */
+  render: boolean;
+  /** Sound effect wired */
+  sound?: boolean;
+  /** AI can trigger this action */
+  ai?: boolean;
+}
 
 /**
  * Tracks end-to-end completeness per feature.
  * Update this as features are wired.
  */
-export const FEATURE_MATRIX = {
-  rollDice:         { fe: true,  event: true,  reducer: true,  projection: true,  render: true  },
-  buildRoad:        { fe: true,  event: true,  reducer: true,  projection: true,  render: true  },
-  buildSettlement:  { fe: true,  event: true,  reducer: true,  projection: true,  render: true  },
-  upgradeCity:      { fe: true,  event: true,  reducer: true,  projection: true,  render: true  },
-  bankTrade:        { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-  domesticTrade:    { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-  devCards:         { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-  robber:           { fe: true,  event: true,  reducer: true,  projection: true,  render: true  },
-  longestRoad:      { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-  largestArmy:      { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-  winCondition:     { fe: true,  event: true,  reducer: true,  projection: true,  render: false },
-} as const;
+export const FEATURE_MATRIX: Record<string, FeatureMatrixRow> = {
+  // Core gameplay
+  rollDice:         { fe: true,  event: true,  reducer: true,  projection: true,  render: true,  sound: true,  ai: true  },
+  buildRoad:        { fe: true,  event: true,  reducer: true,  projection: true,  render: true,  sound: true,  ai: true  },
+  buildSettlement:  { fe: true,  event: true,  reducer: true,  projection: true,  render: true,  sound: true,  ai: true  },
+  upgradeCity:      { fe: true,  event: true,  reducer: true,  projection: true,  render: true,  sound: true,  ai: true  },
+  bankTrade:        { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: true,  ai: true  },
+  domesticTrade:    { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: true,  ai: true  },
+  devCards:         { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: true,  ai: true  },
+  robber:           { fe: true,  event: true,  reducer: true,  projection: true,  render: true,  sound: true,  ai: true  },
+  longestRoad:      { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: false, ai: false },
+  largestArmy:      { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: false, ai: false },
+  winCondition:     { fe: true,  event: true,  reducer: true,  projection: true,  render: false, sound: true,  ai: false },
+  // Visual
+  terrain3D:        { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  postProcessing:   { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  hdrEnvironment:   { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  windShaders:      { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  resourceFlow3D:   { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  // HUD features
+  tutorial:         { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  rulesReference:   { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  gameChat:         { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  diceHistory:      { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  saveLoad:         { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  replayControls:   { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  zoomControls:     { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  keyboardControls: { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  resourceNotif:    { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  tradeRating:      { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
+  // Board generation
+  variableBoards:   { fe: true,  event: false, reducer: false, projection: false, render: true,  sound: false, ai: false },
+  constraintSolver: { fe: true,  event: false, reducer: false, projection: false, render: false, sound: false, ai: false },
+  // AI
+  aiMultiAction:    { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
+  aiTradeProposal:  { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
+  aiPreRollKnight:  { fe: false, event: false, reducer: false, projection: false, render: false, sound: false, ai: true  },
+};
