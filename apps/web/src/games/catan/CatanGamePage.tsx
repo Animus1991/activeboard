@@ -1037,6 +1037,9 @@ export default function CatanGamePage() {
       return;
     }
 
+    // Always show bank management popup when clicking a vertex
+    setSelectedVertex(vertexId);
+
     if (buildMode === 'settlement' && phase === 'main') {
       if (canBuildSettlement(gameState, playerId, vertexId)) {
         setGameState(prev => buildSettlement(prev, playerId, vertexId));

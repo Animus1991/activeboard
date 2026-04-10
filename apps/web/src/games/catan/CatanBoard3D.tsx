@@ -1796,18 +1796,18 @@ function VertexBuildMarker({ position, vertexId, onClick, color }: {
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
       >
-        <circleGeometry args={[0.06, 16]} />
-        <meshBasicMaterial color={hovered ? '#FFFFFF' : color} />
+        <circleGeometry args={[0.04, 16]} />
+        <meshBasicMaterial color={color} />
       </mesh>
 
-      {/* Smaller outline on hover - half size of original */}
+      {/* Smaller outline on hover - half size */}
       {hovered && (
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
           position={[position[0], position[1] + 0.12, position[2]]}
         >
-          <ringGeometry args={[0.09, 0.12, 32]} />
-          <meshBasicMaterial color={color} transparent opacity={0.6} side={THREE.DoubleSide} />
+          <ringGeometry args={[0.06, 0.08, 32]} />
+          <meshBasicMaterial color={color} transparent opacity={0.8} side={THREE.DoubleSide} />
         </mesh>
       )}
 
