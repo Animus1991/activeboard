@@ -633,9 +633,9 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
             </mesh>
             {/* Number — simplified for clarity */}
             <Text
-              position={[0, 0.07, 0]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.42}
+              position={[0, 0.15, 0]}
+              rotation={[0, 0, 0]}
+              fontSize={0.35}
               color={hot ? '#000000' : '#000000'}
               anchorX="center"
               anchorY="middle"
