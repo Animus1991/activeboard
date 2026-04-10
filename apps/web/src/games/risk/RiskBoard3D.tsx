@@ -252,24 +252,22 @@ function ConnectionLines({ gameState }: { gameState: GameState }) {
 // ============================================================================
 
 function ContinentBorders({ gameState }: { gameState: GameState }) {
-  const borders = useMemo(() => {
+  // 1) Dashed outlines around each continent
+  const outlines = useMemo(() => {
     return CONTINENTS.map(continent => {
       const territories = gameState.territories.filter(t => t.continent === continent.id);
       if (!territories.length) return null;
 
-      // Compute convex hull-like boundary from territory positions with padding
       const pts = territories.map(t => toBoard(t.position.x, t.position.y));
       const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
       const cz = pts.reduce((s, p) => s + p[2], 0) / pts.length;
 
-      // Sort points by angle from centroid for convex hull
       const sorted = [...pts].sort((a, b) => {
         const angA = Math.atan2(a[2] - cz, a[0] - cx);
         const angB = Math.atan2(b[2] - cz, b[0] - cx);
         return angA - angB;
       });
 
-      // Expand outward from centroid for border padding
       const padding = 1.8;
       const expanded = sorted.map(p => {
         const dx = p[0] - cx;
@@ -279,12 +277,8 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
         return new THREE.Vector3(cx + dx * scale, 0.06, cz + dz * scale);
       });
 
-      // Close the loop
-      if (expanded.length > 0) {
-        expanded.push(expanded[0].clone());
-      }
+      if (expanded.length > 0) expanded.push(expanded[0].clone());
 
-      // Create smooth curve through the points
       const curve = new THREE.CatmullRomCurve3(expanded, true, 'centripetal', 0.5);
       const curvePoints = curve.getPoints(expanded.length * 12);
 
@@ -293,9 +287,45 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
     }).filter(Boolean);
   }, [gameState.territories]);
 
+  // 2) Cross-continent dashed separator lines between territories of different continents
+  const separators = useMemo(() => {
+    const result: { id: string; from: THREE.Vector3; to: THREE.Vector3 }[] = [];
+    const seen = new Set<string>();
+    gameState.territories.forEach(t => {
+      t.neighbors.forEach(nid => {
+        const key = [t.id, nid].sort().join('--');
+        if (seen.has(key)) return;
+        seen.add(key);
+        const n = gameState.territories.find(x => x.id === nid);
+        if (!n) return;
+        if (t.continent === n.continent) return; // Same continent — skip
+        if (Math.abs(t.position.x - n.position.x) > 400) return; // Skip wrap-around
+        const from = toBoard(t.position.x, t.position.y);
+        const to = toBoard(n.position.x, n.position.y);
+
+        // Draw a perpendicular dashed line at the midpoint to indicate the border
+        const mx = (from[0] + to[0]) / 2;
+        const mz = (from[2] + to[2]) / 2;
+        const dx = to[0] - from[0];
+        const dz = to[2] - from[2];
+        const len = Math.sqrt(dx * dx + dz * dz);
+        const perpX = -dz / len;
+        const perpZ = dx / len;
+        const halfW = 1.2; // half-width of the perpendicular separator
+        result.push({
+          id: key,
+          from: new THREE.Vector3(mx - perpX * halfW, 0.065, mz - perpZ * halfW),
+          to: new THREE.Vector3(mx + perpX * halfW, 0.065, mz + perpZ * halfW),
+        });
+      });
+    });
+    return result;
+  }, [gameState.territories]);
+
   return (
     <group>
-      {borders.map(border => {
+      {/* Continent outlines */}
+      {outlines.map(border => {
         if (!border) return null;
         const geo = new THREE.BufferGeometry().setFromPoints(border.points);
         const mat = new THREE.LineDashedMaterial({
@@ -309,6 +339,22 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
         const line = new THREE.Line(geo, mat);
         line.computeLineDistances();
         return <primitive key={border.id} object={line} />;
+      })}
+
+      {/* Cross-continent separator dashes */}
+      {separators.map(sep => {
+        const geo = new THREE.BufferGeometry().setFromPoints([sep.from, sep.to]);
+        const mat = new THREE.LineDashedMaterial({
+          color: '#FFFFFF',
+          transparent: true,
+          opacity: 0.35,
+          dashSize: 0.25,
+          gapSize: 0.15,
+          linewidth: 1,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.computeLineDistances();
+        return <primitive key={sep.id} object={line} />;
       })}
     </group>
   );

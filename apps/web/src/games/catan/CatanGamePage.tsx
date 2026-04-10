@@ -3,7 +3,7 @@
  * Complete game interface with hexagonal board
  */
 
-import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
@@ -1043,6 +1043,35 @@ export default function CatanGamePage() {
   const showEdgeTargets = buildMode === 'road' || gameState.phase === 'setup-road' || gameState.freeRoadsRemaining > 0;
 
   const currentPlayer = getCurrentPlayer(gameState);
+
+  // Compute ONLY the valid placement positions — filter out illegal spots
+  const validVertexIds = useMemo(() => {
+    if (!showVertexTargets) return [];
+    const pid = currentPlayer.id;
+    const isSetup = gameState.phase === 'setup-settlement';
+
+    if (buildMode === 'city') {
+      // City: only the current player's existing settlements
+      return gameState.vertices
+        .filter(v => canBuildCity(gameState, pid, v.id))
+        .map(v => v.id);
+    }
+
+    // Settlement (setup or main phase)
+    return gameState.vertices
+      .filter(v => canBuildSettlement(gameState, pid, v.id, isSetup))
+      .map(v => v.id);
+  }, [showVertexTargets, gameState, buildMode, currentPlayer.id]);
+
+  const validEdgeIds = useMemo(() => {
+    if (!showEdgeTargets) return [];
+    const pid = currentPlayer.id;
+    const isSetup = gameState.phase === 'setup-road';
+
+    return gameState.edges
+      .filter(e => canBuildRoad(gameState, pid, e.id, isSetup))
+      .map(e => e.id);
+  }, [showEdgeTargets, gameState, currentPlayer.id]);
   const uiProjection = computeUIProjection(gameState, currentPlayer.id);
   const diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
   const phaseHelp = (() => {
@@ -1083,6 +1112,8 @@ export default function CatanGamePage() {
           onHexClick={handleHexClick}
           onVertexClick={showVertexTargets ? handleVertexClick : undefined}
           onEdgeClick={showEdgeTargets ? handleEdgeClick : undefined}
+          validVertexIds={validVertexIds}
+          validEdgeIds={validEdgeIds}
         />
       </div>
 

@@ -1947,16 +1947,16 @@ function VertexBuildMarker({ position, vertexId, onClick }: {
           <meshStandardMaterial
             color={hovered ? '#FFFFFF' : '#FFD700'}
             emissive={hovered ? '#FFE040' : '#FF8C00'}
-            emissiveIntensity={hovered ? 1.5 : 0.8}
+            emissiveIntensity={hovered ? 1.0 : 0.5}
             roughness={0.3}
             metalness={0.1}
           />
         </mesh>
-        {/* Glow light */}
+        {/* Glow light — subtle, not overwhelming */}
         <pointLight
           color="#FFD700"
-          intensity={hovered ? 3.0 : 1.2}
-          distance={3}
+          intensity={hovered ? 1.5 : 0.4}
+          distance={2}
           decay={2}
         />
       </group>
@@ -2009,7 +2009,7 @@ function EdgeBuildMarker({ position, rotation, length, edgeId, onClick }: {
         <meshStandardMaterial
           color={hovered ? '#FFFFFF' : '#FFA500'}
           emissive={hovered ? '#FFD700' : '#FF6600'}
-          emissiveIntensity={hovered ? 1.5 : 0.7}
+          emissiveIntensity={hovered ? 1.0 : 0.45}
           roughness={0.4}
           metalness={0.1}
           transparent
@@ -2035,11 +2035,11 @@ function EdgeBuildMarker({ position, rotation, length, edgeId, onClick }: {
         />
       </mesh>
 
-      {/* Glow light */}
+      {/* Glow light — subtle */}
       <pointLight
         color="#FFA500"
-        intensity={hovered ? 2.5 : 0.8}
-        distance={2.5}
+        intensity={hovered ? 1.2 : 0.3}
+        distance={2}
         decay={2}
       />
 
@@ -2068,9 +2068,11 @@ interface BoardContentProps {
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
+  validVertexIds?: string[];
+  validEdgeIds?: string[];
 }
 
-function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
+function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick, validVertexIds, validEdgeIds }: BoardContentProps) {
   const orbitRef = useRef<any>(null);
   useKeyboardControls(orbitRef);
 
@@ -2254,42 +2256,46 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
       {/* Spatial Ambience — 3D positioned ambient audio infrastructure */}
       <SpatialAmbience />
 
-      {/* Buildable vertex indicators — large pulsing animated markers */}
-      {onVertexClick && gameState.vertices.filter(v => !v.building).map(vertex => {
-        const pos = getVertexWorldPos(vertex, gameState.hexTiles);
-        if (!pos) return null;
-        return (
-          <VertexBuildMarker
-            key={`vbuild-${vertex.id}`}
-            position={pos}
-            vertexId={vertex.id}
-            onClick={onVertexClick}
-          />
-        );
+      {/* Buildable vertex indicators — ONLY valid positions */}
+      {onVertexClick && validVertexIds && validVertexIds.length > 0 && gameState.vertices
+        .filter(v => validVertexIds.includes(v.id))
+        .map(vertex => {
+          const pos = getVertexWorldPos(vertex, gameState.hexTiles);
+          if (!pos) return null;
+          return (
+            <VertexBuildMarker
+              key={`vbuild-${vertex.id}`}
+              position={pos}
+              vertexId={vertex.id}
+              onClick={onVertexClick}
+            />
+          );
       })}
 
-      {/* Buildable edge indicators — large pulsing animated road markers */}
-      {onEdgeClick && gameState.edges.filter(e => !e.road).map(edge => {
-        const v1 = gameState.vertices.find(v => v.id === edge.vertexIds[0]);
-        const v2 = gameState.vertices.find(v => v.id === edge.vertexIds[1]);
-        if (!v1 || !v2) return null;
-        const p1 = getVertexWorldPos(v1, gameState.hexTiles);
-        const p2 = getVertexWorldPos(v2, gameState.hexTiles);
-        if (!p1 || !p2) return null;
-        const midX = (p1[0] + p2[0]) / 2;
-        const midZ = (p1[2] + p2[2]) / 2;
-        const length = Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[2] - p1[2]) ** 2);
-        const angle = Math.atan2(p2[2] - p1[2], p2[0] - p1[0]);
-        return (
-          <EdgeBuildMarker
-            key={`ebuild-${edge.id}`}
-            position={[midX, 0.12, midZ] as [number, number, number]}
-            rotation={angle}
-            length={length}
-            edgeId={edge.id}
-            onClick={onEdgeClick}
-          />
-        );
+      {/* Buildable edge indicators — ONLY valid positions */}
+      {onEdgeClick && validEdgeIds && validEdgeIds.length > 0 && gameState.edges
+        .filter(e => validEdgeIds.includes(e.id))
+        .map(edge => {
+          const v1 = gameState.vertices.find(v => v.id === edge.vertexIds[0]);
+          const v2 = gameState.vertices.find(v => v.id === edge.vertexIds[1]);
+          if (!v1 || !v2) return null;
+          const p1 = getVertexWorldPos(v1, gameState.hexTiles);
+          const p2 = getVertexWorldPos(v2, gameState.hexTiles);
+          if (!p1 || !p2) return null;
+          const midX = (p1[0] + p2[0]) / 2;
+          const midZ = (p1[2] + p2[2]) / 2;
+          const length = Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[2] - p1[2]) ** 2);
+          const angle = Math.atan2(p2[2] - p1[2], p2[0] - p1[0]);
+          return (
+            <EdgeBuildMarker
+              key={`ebuild-${edge.id}`}
+              position={[midX, 0.12, midZ] as [number, number, number]}
+              rotation={angle}
+              length={length}
+              edgeId={edge.id}
+              onClick={onEdgeClick}
+            />
+          );
       })}
     </>
   );
@@ -2306,10 +2312,12 @@ interface CatanBoard3DProps {
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
+  validVertexIds?: string[];
+  validEdgeIds?: string[];
 }
 
 export default function CatanBoard3D({ 
-  gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick
+  gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick, validVertexIds, validEdgeIds
 }: CatanBoard3DProps) {
   return (
     <div className="w-full h-full bg-black overflow-hidden relative">
@@ -2334,6 +2342,8 @@ export default function CatanBoard3D({
               onHexClick={onHexClick}
               onVertexClick={onVertexClick}
               onEdgeClick={onEdgeClick}
+              validVertexIds={validVertexIds}
+              validEdgeIds={validEdgeIds}
             />
           </Suspense>
         </XR>
