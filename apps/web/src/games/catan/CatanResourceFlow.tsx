@@ -199,7 +199,7 @@ export function Resource3DIcon({ resource, size = 40, className }: Resource3DIco
         frameloop="demand"
         camera={{ position: [0, 0, 0.5], fov: 45 }}
         gl={{ antialias: true, alpha: true }}
-        dpr={[1, 2]}
+        dpr={[1.5, 2]}
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[2, 3, 2]} intensity={1.2} />

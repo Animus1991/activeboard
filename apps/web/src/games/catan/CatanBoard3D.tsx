@@ -20,6 +20,7 @@ import {
   type Vertex,
 } from './CatanEngine';
 import { CatanPresence3D, type Presence3DPlayer } from './CatanPresence3D';
+import { ResourceFlow3D, type ResourceAnimation } from './CatanResourceFlow';
 
 const xrStore = createXRStore({ hand: { teleportPointer: true } });
 
@@ -27,14 +28,14 @@ const xrStore = createXRStore({ hand: { teleportPointer: true } });
 // TERRAIN MATERIALS — PBR-style colors per terrain type
 // ============================================================================
 
-// PBR terrain materials — rich physical board colours with subtle emissive depth
+// Storybook terrain materials — warm hand-painted matte gouache feel (Disney classics)
 const TERRAIN_MATS: Record<string, { base: string; top: string; emissive: string; height: number; roughness: number; metalness: number }> = {
-  forest:    { base: '#14401A', top: '#1C5420', emissive: '#041A06', height: 0.15, roughness: 0.92, metalness: 0.0 },
-  hills:     { base: '#7A2810', top: '#9C3218', emissive: '#1A0800', height: 0.24, roughness: 0.88, metalness: 0.02 },
-  pasture:   { base: '#2E7C20', top: '#3C9028', emissive: '#061A04', height: 0.09, roughness: 0.94, metalness: 0.0 },
-  fields:    { base: '#9A6A08', top: '#B88010', emissive: '#1A1200', height: 0.08, roughness: 0.90, metalness: 0.0 },
-  mountains: { base: '#3A444E', top: '#4E5868', emissive: '#0A0E14', height: 0.38, roughness: 0.78, metalness: 0.08 },
-  desert:    { base: '#9A7428', top: '#B88C38', emissive: '#1A1408', height: 0.06, roughness: 0.95, metalness: 0.0 },
+  forest:    { base: '#1E5A22', top: '#2A6E2C', emissive: '#081E08', height: 0.15, roughness: 0.96, metalness: 0.0 },
+  hills:     { base: '#A04520', top: '#C05C30', emissive: '#1C0A04', height: 0.24, roughness: 0.96, metalness: 0.0 },
+  pasture:   { base: '#48962A', top: '#5AAC38', emissive: '#0C1E06', height: 0.09, roughness: 0.97, metalness: 0.0 },
+  fields:    { base: '#C09018', top: '#D8A828', emissive: '#1E1604', height: 0.08, roughness: 0.96, metalness: 0.0 },
+  mountains: { base: '#4A5C6E', top: '#5E7286', emissive: '#0C1018', height: 0.38, roughness: 0.94, metalness: 0.0 },
+  desert:    { base: '#C09838', top: '#D8B050', emissive: '#1E1808', height: 0.06, roughness: 0.97, metalness: 0.0 },
 };
 
 const HEX_SIZE = 1.28;
@@ -117,8 +118,71 @@ function _applyHexVignette(c: CanvasRenderingContext2D, cx: number, cy: number, 
   c.fillRect(0, 0, S, S);
 }
 
+// ── Disney Storybook watercolor helpers ───────────────────────────────────
+
+// Soft wash — multiple semi-transparent radial blobs to simulate wet-on-wet
+function _watercolorWash(c: CanvasRenderingContext2D, S: number, color: string, alpha: number, count = 12) {
+  for (let i = 0; i < count; i++) {
+    const px = S * 0.1 + Math.random() * S * 0.8;
+    const py = S * 0.1 + Math.random() * S * 0.8;
+    const r = S * (0.08 + Math.random() * 0.22);
+    const g = c.createRadialGradient(px, py, 0, px, py, r);
+    g.addColorStop(0, color.replace(')', `,${alpha * (0.6 + Math.random() * 0.4)})`).replace('rgb(', 'rgba('));
+    g.addColorStop(0.6, color.replace(')', `,${alpha * 0.2})`).replace('rgb(', 'rgba('));
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, S, S);
+  }
+}
+
+// Brushstroke texture — angled streaks that mimic gouache
+function _brushStrokes(c: CanvasRenderingContext2D, S: number, color: string, alpha: number, count = 18) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.lineCap = 'round';
+  for (let i = 0; i < count; i++) {
+    const sx = Math.random() * S;
+    const sy = Math.random() * S;
+    const angle = -0.3 + Math.random() * 0.6; // slight diagonal
+    const len = S * (0.06 + Math.random() * 0.18);
+    const w = S * (0.008 + Math.random() * 0.025);
+    c.strokeStyle = color;
+    c.lineWidth = w;
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(sx + Math.cos(angle) * len, sy + Math.sin(angle) * len);
+    c.stroke();
+  }
+  c.restore();
+}
+
+// Watercolor paper grain — warm-toned fine speckle
+function _paperGrain(c: CanvasRenderingContext2D, S: number, intensity = 0.03) {
+  const imgData = c.getImageData(0, 0, S, S);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const grain = (Math.random() - 0.5) * intensity * 255;
+    d[i]     = Math.max(0, Math.min(255, d[i] + grain * 1.1));    // warm bias
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + grain * 0.95));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + grain * 0.8)); // reduce blue
+  }
+  c.putImageData(imgData, 0, 0);
+}
+
+// Golden-hour warm overlay — Disney storybook films always have warm tones
+function _warmGlow(c: CanvasRenderingContext2D, S: number, strength = 0.08) {
+  c.save();
+  c.globalCompositeOperation = 'overlay';
+  const g = c.createRadialGradient(S * 0.3, S * 0.3, 0, S * 0.5, S * 0.5, S * 0.6);
+  g.addColorStop(0, `rgba(255,220,140,${strength})`);
+  g.addColorStop(1, `rgba(180,120,40,${strength * 0.3})`);
+  c.fillStyle = g;
+  c.fillRect(0, 0, S, S);
+  c.restore();
+}
+
 function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
-  const S = 1024;
+  const S = 2048;
   const canvas = document.createElement('canvas');
   canvas.width = S; canvas.height = S;
   const c = canvas.getContext('2d')!;
@@ -135,229 +199,303 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
   c.closePath(); c.clip();
 
   if (terrain === 'forest') {
-    // Multi-layer forest floor
-    const bg = c.createRadialGradient(cx, cy * 0.7, 0, cx, cy, S * 0.56);
-    bg.addColorStop(0, '#2C6A14'); bg.addColorStop(0.5, '#1E5010'); bg.addColorStop(1, '#0C2806');
+    // Storybook forest — deep emerald watercolor washes like Sleeping Beauty backgrounds
+    const bg = c.createRadialGradient(cx, cy * 0.65, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#3A7A28'); bg.addColorStop(0.4, '#265818'); bg.addColorStop(1, '#122A08');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Dappled light
-    const dapple = c.createRadialGradient(cx - 60, cy - 90, 20, cx - 60, cy - 90, 200);
-    dapple.addColorStop(0, 'rgba(120,180,40,0.22)'); dapple.addColorStop(1, 'rgba(40,80,10,0)');
-    c.fillStyle = dapple; c.fillRect(0, 0, S, S);
-    // Leaf litter / moss patches outside safe
-    const mossPts = _scatterPoints(cx, cy, SAFE, 18, 40, S);
+    // Layered watercolor washes — multiple transparent layers build depth
+    _watercolorWash(c, S, 'rgb(60,130,30)', 0.18, 10);
+    _watercolorWash(c, S, 'rgb(20,80,10)', 0.12, 6);
+    // Dappled sunlight pools — golden light filtering through canopy
+    for (let i = 0; i < 5; i++) {
+      const dx = cx + (Math.random() - 0.5) * S * 0.5;
+      const dy = cy + (Math.random() - 0.5) * S * 0.5;
+      const gr = c.createRadialGradient(dx, dy, 0, dx, dy, S * 0.08 + Math.random() * S * 0.06);
+      gr.addColorStop(0, 'rgba(180,220,80,0.18)');
+      gr.addColorStop(1, 'rgba(80,140,30,0)');
+      c.fillStyle = gr; c.fillRect(0, 0, S, S);
+    }
+    // Moss patches — soft wet blobs
+    const mossPts = _scatterPoints(cx, cy, SAFE, 14, 50, S);
     mossPts.forEach(([mx, my]) => {
-      const r = 15 + Math.random() * 25;
-      const g = c.createRadialGradient(mx, my, 0, mx, my, r);
-      g.addColorStop(0, `rgba(${50 + Math.random() * 40},${100 + Math.random() * 40},20,0.35)`);
-      g.addColorStop(1, 'rgba(30,60,10,0)');
-      c.fillStyle = g; c.beginPath(); c.arc(mx, my, r, 0, Math.PI * 2); c.fill();
+      const r = 20 + Math.random() * 35;
+      c.save(); c.globalAlpha = 0.3;
+      const mg = c.createRadialGradient(mx, my, 0, mx, my, r);
+      mg.addColorStop(0, '#4C9830'); mg.addColorStop(1, 'rgba(40,80,20,0)');
+      c.fillStyle = mg; c.beginPath(); c.arc(mx, my, r, 0, Math.PI * 2); c.fill();
+      c.restore();
     });
-    // Trees at 8 positions outside safe
+    // Hand-painted trees — soft, rounded, storybook silhouettes
     const treePts: [number, number, number][] = [
       [cx - 200, cy - 80, 82], [cx + 190, cy - 75, 76], [cx - 200, cy + 100, 70],
       [cx + 195, cy + 95, 74], [cx - 70, cy + 230, 64], [cx + 75, cy + 235, 62],
       [cx - 140, cy - 190, 58], [cx + 130, cy - 195, 60],
     ];
     treePts.forEach(([tx, ty, sz]) => drawTree(c, tx, ty, sz));
-    // Shadow under trees
     treePts.forEach(([tx, ty, sz]) => {
-      c.fillStyle = 'rgba(0,20,0,0.18)';
+      c.fillStyle = 'rgba(8,30,4,0.20)';
       c.beginPath(); c.ellipse(tx, ty + sz * 0.35, sz * 0.5, sz * 0.18, 0, 0, Math.PI * 2); c.fill();
     });
-    _applyNoiseOverlay(c, S, 0.06, true);
-    _applyHexVignette(c, cx, cy, S, 0.30);
+    // Visible brushstrokes — gouache texture
+    _brushStrokes(c, S, '#1A5C10', 0.12, 14);
+    _brushStrokes(c, S, '#3C8A28', 0.08, 8);
+    _applyNoiseOverlay(c, S, 0.04, true);
+    _warmGlow(c, S, 0.06);
+    _paperGrain(c, S, 0.025);
+    _applyHexVignette(c, cx, cy, S, 0.28);
 
   } else if (terrain === 'hills') {
-    const bg = c.createLinearGradient(0, 0, S * 0.3, S);
-    bg.addColorStop(0, '#C85020'); bg.addColorStop(0.5, '#A03010'); bg.addColorStop(1, '#6A1C08');
+    // Storybook hills — warm terracotta watercolor like Disney's Bambi autumn scenes
+    const bg = c.createRadialGradient(cx, cy * 0.6, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#D4713A'); bg.addColorStop(0.4, '#B85428'); bg.addColorStop(1, '#7A2C10');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Warm highlight
-    const hl = c.createRadialGradient(cx - 50, cy - 80, 10, cx - 50, cy - 80, S * 0.45);
-    hl.addColorStop(0, 'rgba(240,130,70,0.42)'); hl.addColorStop(1, 'rgba(200,90,40,0)');
+    // Layered terracotta washes
+    _watercolorWash(c, S, 'rgb(200,100,50)', 0.20, 10);
+    _watercolorWash(c, S, 'rgb(160,60,20)', 0.14, 6);
+    // Warm sunset highlight pool
+    const hl = c.createRadialGradient(cx - 40, cy - 70, 10, cx - 40, cy - 70, S * 0.35);
+    hl.addColorStop(0, 'rgba(255,180,100,0.30)'); hl.addColorStop(1, 'rgba(200,100,40,0)');
     c.fillStyle = hl; c.fillRect(0, 0, S, S);
-    // Rolling hill contours
+    // Soft rolling hill contours — watercolor blobs
     const hillPts: [number, number, number, number, string][] = [
-      [cx, cy - SAFE - 70, 260, 100, 'rgba(180,70,25,0.35)'],
-      [cx - 100, cy + SAFE + 50, 220, 85, 'rgba(150,50,15,0.30)'],
-      [cx + 110, cy + SAFE + 70, 200, 75, 'rgba(140,45,12,0.28)'],
+      [cx, cy - SAFE - 70, 260, 100, 'rgba(190,90,40,0.28)'],
+      [cx - 100, cy + SAFE + 50, 220, 85, 'rgba(165,65,25,0.25)'],
+      [cx + 110, cy + SAFE + 70, 200, 75, 'rgba(150,55,18,0.22)'],
     ];
     hillPts.forEach(([hx, hy, rw, rh, col]) => {
       c.fillStyle = col;
       c.beginPath(); c.ellipse(hx, hy, rw, rh, 0, Math.PI, 0); c.closePath(); c.fill();
     });
-    // Brick/clay deposits at edges
-    for (let row = 0; row < 5; row++) {
-      for (let col = 0; col < 6; col++) {
-        const bx = S * 0.18 + col * (S * 0.12) + (row % 2) * (S * 0.06);
-        const by = cy + SAFE + 15 + row * (S * 0.04);
-        if (by > S * 0.90) break;
-        c.fillStyle = `rgba(80,20,0,${0.25 + Math.random() * 0.15})`;
-        c.fillRect(bx, by, S * 0.09, S * 0.028);
-        c.strokeStyle = 'rgba(255,120,50,0.25)'; c.lineWidth = 1;
-        c.strokeRect(bx, by, S * 0.09, S * 0.028);
-      }
-    }
-    _applyNoiseOverlay(c, S, 0.07, true);
-    _applyHexVignette(c, cx, cy, S, 0.32);
+    // Soft clay patches — watercolor blobs instead of hard rectangles
+    const clayPts = _scatterPoints(cx, cy, SAFE * 1.1, 10, 60, S);
+    clayPts.forEach(([bx, by]) => {
+      const r = 18 + Math.random() * 28;
+      c.save(); c.globalAlpha = 0.25 + Math.random() * 0.15;
+      const cg = c.createRadialGradient(bx, by, 0, bx, by, r);
+      cg.addColorStop(0, '#8A3818'); cg.addColorStop(1, 'rgba(100,40,10,0)');
+      c.fillStyle = cg; c.beginPath(); c.arc(bx, by, r, 0, Math.PI * 2); c.fill();
+      c.restore();
+    });
+    // Hand-painted gouache strokes
+    _brushStrokes(c, S, '#A04020', 0.14, 16);
+    _brushStrokes(c, S, '#D08050', 0.08, 8);
+    _applyNoiseOverlay(c, S, 0.04, true);
+    _warmGlow(c, S, 0.08);
+    _paperGrain(c, S, 0.025);
+    _applyHexVignette(c, cx, cy, S, 0.30);
 
   } else if (terrain === 'pasture') {
-    const bg = c.createLinearGradient(0, 0, 0, S);
-    bg.addColorStop(0, '#78B838'); bg.addColorStop(0.6, '#4C9818'); bg.addColorStop(1, '#2A7010');
+    // Storybook pasture — spring meadow watercolor like Disney's Fantasia pastoral scenes
+    const bg = c.createRadialGradient(cx, cy * 0.7, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#8AC84A'); bg.addColorStop(0.4, '#5CA828'); bg.addColorStop(1, '#347818');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Gentle rolling hills at edges
+    // Layered meadow washes — bright spring greens
+    _watercolorWash(c, S, 'rgb(120,200,60)', 0.16, 10);
+    _watercolorWash(c, S, 'rgb(80,160,30)', 0.10, 6);
+    // Gentle rolling hills at edges — soft watercolor arcs
     const rollHills: [number, number, number, number, string][] = [
-      [cx - 80, cy + SAFE + 80, 250, 95, '#5CA822'],
-      [cx + 90, cy + SAFE + 95, 220, 85, '#4E9A1A'],
-      [cx, cy - SAFE - 60, 280, 70, '#68B430'],
+      [cx - 80, cy + SAFE + 80, 250, 95, 'rgba(110,190,55,0.30)'],
+      [cx + 90, cy + SAFE + 95, 220, 85, 'rgba(95,180,40,0.25)'],
+      [cx, cy - SAFE - 60, 280, 70, 'rgba(125,200,65,0.28)'],
     ];
     rollHills.forEach(([hx, hy, rw, rh, col]) => {
       c.fillStyle = col;
       c.beginPath(); c.ellipse(hx, hy, rw, rh, 0, Math.PI, 0); c.closePath(); c.fill();
     });
-    // Rustic fence at edge
+    // Hand-painted rustic fence — soft brushstroke lines
     const fy = cy + SAFE + 25;
-    c.fillStyle = '#6A4C0C'; c.fillRect(S * 0.15, fy, S * 0.70, S * 0.012);
-    const fencePosts = [0.18, 0.32, 0.50, 0.68, 0.82];
-    fencePosts.forEach(fx => {
-      c.fillStyle = '#6A4C0C'; c.fillRect(S * fx, fy - S * 0.03, S * 0.014, S * 0.07);
+    c.save(); c.globalAlpha = 0.65;
+    c.strokeStyle = '#7A5818'; c.lineWidth = S * 0.012; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(S * 0.15, fy); c.lineTo(S * 0.85, fy); c.stroke();
+    [0.20, 0.35, 0.50, 0.65, 0.80].forEach(fx => {
+      c.strokeStyle = '#6A4C0C'; c.lineWidth = S * 0.01;
+      c.beginPath(); c.moveTo(S * fx, fy - S * 0.025); c.lineTo(S * fx, fy + S * 0.03); c.stroke();
     });
-    // Fluffy sheep blobs at corners — pure wool, no faces
+    c.restore();
+    // Fluffy watercolor sheep — soft white blobs with warm shadows
     const sheepPts = _scatterPoints(cx, cy, SAFE * 1.1, 5, S * 0.12, S);
     sheepPts.forEach(([sx, sy]) => {
-      c.fillStyle = 'rgba(248,248,245,0.90)';
-      c.beginPath(); c.ellipse(sx, sy, S * 0.045, S * 0.032, Math.random() * 0.3, 0, Math.PI * 2); c.fill();
-      for (let k = 0; k < 5; k++) {
-        const dx = (Math.random() - 0.5) * S * 0.05;
-        const dy = (Math.random() - 0.5) * S * 0.035;
-        c.fillStyle = 'rgba(255,255,255,0.80)';
-        c.beginPath(); c.arc(sx + dx, sy + dy, S * 0.018, 0, Math.PI * 2); c.fill();
-      }
-      // Shadow
-      c.fillStyle = 'rgba(0,40,0,0.12)';
-      c.beginPath(); c.ellipse(sx, sy + S * 0.03, S * 0.04, S * 0.012, 0, 0, Math.PI * 2); c.fill();
+      // Body — soft circular wash
+      const sg = c.createRadialGradient(sx, sy, 0, sx, sy, S * 0.04);
+      sg.addColorStop(0, 'rgba(255,255,250,0.90)'); sg.addColorStop(0.7, 'rgba(245,240,230,0.60)'); sg.addColorStop(1, 'rgba(230,220,200,0)');
+      c.fillStyle = sg; c.beginPath(); c.arc(sx, sy, S * 0.04, 0, Math.PI * 2); c.fill();
+      // Warm shadow
+      c.fillStyle = 'rgba(60,40,10,0.12)';
+      c.beginPath(); c.ellipse(sx, sy + S * 0.028, S * 0.035, S * 0.010, 0, 0, Math.PI * 2); c.fill();
     });
-    _applyNoiseOverlay(c, S, 0.05, true);
-    _applyHexVignette(c, cx, cy, S, 0.25);
+    // Wildflower dots — soft small colour spots
+    const flowerPts = _scatterPoints(cx, cy, SAFE, 20, 40, S);
+    flowerPts.forEach(([fx2, fy2]) => {
+      const flCol = ['rgba(255,220,60,0.5)', 'rgba(255,120,180,0.4)', 'rgba(180,130,255,0.35)', 'rgba(255,255,255,0.45)'][Math.floor(Math.random() * 4)];
+      c.fillStyle = flCol;
+      c.beginPath(); c.arc(fx2, fy2, 3 + Math.random() * 4, 0, Math.PI * 2); c.fill();
+    });
+    // Gouache brushstrokes
+    _brushStrokes(c, S, '#4CA830', 0.10, 12);
+    _brushStrokes(c, S, '#7CC850', 0.06, 6);
+    _applyNoiseOverlay(c, S, 0.035, true);
+    _warmGlow(c, S, 0.07);
+    _paperGrain(c, S, 0.022);
+    _applyHexVignette(c, cx, cy, S, 0.22);
 
   } else if (terrain === 'fields') {
-    const bg = c.createLinearGradient(0, 0, S * 0.2, S);
-    bg.addColorStop(0, '#E8B820'); bg.addColorStop(0.5, '#C48A0C'); bg.addColorStop(1, '#7A5200');
+    // Storybook wheat fields — golden harvest like Disney's Brother Bear autumn palette
+    const bg = c.createRadialGradient(cx, cy * 0.65, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#F0C840'); bg.addColorStop(0.4, '#D4A020'); bg.addColorStop(1, '#8A6010');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Golden light glow
-    const glow = c.createRadialGradient(cx, cy * 0.7, 20, cx, cy * 0.7, S * 0.4);
-    glow.addColorStop(0, 'rgba(255,220,80,0.30)'); glow.addColorStop(1, 'rgba(255,200,50,0)');
+    // Layered golden washes
+    _watercolorWash(c, S, 'rgb(240,190,50)', 0.18, 10);
+    _watercolorWash(c, S, 'rgb(200,140,20)', 0.12, 6);
+    // Warm sunlight pool
+    const glow = c.createRadialGradient(cx - 30, cy * 0.6, 10, cx, cy * 0.7, S * 0.35);
+    glow.addColorStop(0, 'rgba(255,235,120,0.28)'); glow.addColorStop(1, 'rgba(255,210,60,0)');
     c.fillStyle = glow; c.fillRect(0, 0, S, S);
-    // Dense wheat stalks — skip centre safe zone
-    for (let row = 0; row < 12; row++) {
-      const ry = S * 0.06 + row * (S * 0.075);
-      for (let col = 0; col < 12; col++) {
-        const wx = S * 0.04 + col * (S * 0.08) + (row % 2) * (S * 0.04);
+    // Impressionist wheat — soft curved strokes instead of rigid stalks
+    c.save(); c.lineCap = 'round';
+    for (let row = 0; row < 14; row++) {
+      const ry = S * 0.05 + row * (S * 0.065);
+      for (let col = 0; col < 14; col++) {
+        const wx = S * 0.03 + col * (S * 0.07) + (row % 2) * (S * 0.035);
         const dx = wx - cx, dy = ry - cy;
         if (dx * dx + dy * dy < SAFE * SAFE * 0.85) continue;
-        // Stalk
-        const sway = Math.sin(wx * 0.03) * 4;
-        c.strokeStyle = `rgba(140,100,10,${0.5 + Math.random() * 0.3})`;
-        c.lineWidth = 2;
-        c.beginPath(); c.moveTo(wx, ry + S * 0.035); c.lineTo(wx + sway, ry - S * 0.035); c.stroke();
-        // Wheat head
-        c.fillStyle = `rgba(${200 + Math.random() * 40},${150 + Math.random() * 30},${20 + Math.random() * 20},0.9)`;
-        c.beginPath(); c.ellipse(wx + sway, ry - S * 0.042, S * 0.006, S * 0.022, sway * 0.03, 0, Math.PI * 2); c.fill();
-        // Grain kernels
-        for (let k = 0; k < 3; k++) {
-          c.fillStyle = 'rgba(230,180,30,0.7)';
-          c.beginPath();
-          c.ellipse(wx + sway + (k % 2 === 0 ? -3 : 3), ry - S * 0.03 - k * (S * 0.012),
-            S * 0.005, S * 0.01, k % 2 === 0 ? -0.3 : 0.3, 0, Math.PI * 2);
-          c.fill();
-        }
+        const sway = Math.sin(wx * 0.025 + row * 0.5) * 6;
+        // Soft stalk stroke
+        c.strokeStyle = `rgba(${150 + Math.random() * 40},${110 + Math.random() * 30},${15 + Math.random() * 15},${0.4 + Math.random() * 0.3})`;
+        c.lineWidth = 1.5 + Math.random() * 1.5;
+        c.beginPath();
+        c.moveTo(wx, ry + S * 0.03);
+        c.quadraticCurveTo(wx + sway * 0.5, ry, wx + sway, ry - S * 0.035);
+        c.stroke();
+        // Soft wheat head — elliptical blob
+        c.fillStyle = `rgba(${220 + Math.random() * 35},${170 + Math.random() * 40},${30 + Math.random() * 20},0.75)`;
+        c.beginPath(); c.ellipse(wx + sway, ry - S * 0.04, S * 0.005 + Math.random() * S * 0.003, S * 0.018, sway * 0.02, 0, Math.PI * 2); c.fill();
       }
     }
-    _applyNoiseOverlay(c, S, 0.06, true);
-    _applyHexVignette(c, cx, cy, S, 0.28);
+    c.restore();
+    // Warm gouache strokes
+    _brushStrokes(c, S, '#C49018', 0.10, 14);
+    _brushStrokes(c, S, '#E8C040', 0.06, 6);
+    _applyNoiseOverlay(c, S, 0.035, true);
+    _warmGlow(c, S, 0.10);
+    _paperGrain(c, S, 0.025);
+    _applyHexVignette(c, cx, cy, S, 0.25);
 
   } else if (terrain === 'mountains') {
-    const bg = c.createLinearGradient(0, S * 0.85, 0, 0);
-    bg.addColorStop(0, '#283038'); bg.addColorStop(0.4, '#485868'); bg.addColorStop(1, '#728898');
+    // Storybook mountains — moody slate like Disney's Mulan/Fantasia Night on Bald Mountain
+    const bg = c.createRadialGradient(cx, cy * 0.5, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#6A7A8A'); bg.addColorStop(0.4, '#4A5868'); bg.addColorStop(1, '#283040');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Major peaks
-    const peaks: [number, number, number, number, string][] = [
-      [cx - 140, cy - SAFE - 30, 110, 290, '#4C5C68'],
-      [cx + 130, cy - SAFE - 20, 100, 270, '#425260'],
-      [cx, cy - SAFE - 60, 120, 320, '#566A7C'],
+    // Layered cool washes — moody blues and slates
+    _watercolorWash(c, S, 'rgb(80,100,130)', 0.16, 8);
+    _watercolorWash(c, S, 'rgb(50,65,85)', 0.12, 6);
+    // Hand-painted peaks — soft triangular forms with visible brushwork
+    const peaks: [number, number, number, number][] = [
+      [cx - 140, cy - SAFE - 30, 120, 300],
+      [cx + 130, cy - SAFE - 20, 110, 280],
+      [cx, cy - SAFE - 60, 130, 330],
     ];
-    peaks.forEach(([px, py, pw, ph, col]) => {
-      // Mountain body
-      c.fillStyle = col;
+    peaks.forEach(([px, py, pw, ph]) => {
+      // Mountain body — layered washes for depth
+      const mg1 = c.createLinearGradient(px - pw, py + ph * 0.55, px, py);
+      mg1.addColorStop(0, 'rgba(60,75,95,0.8)'); mg1.addColorStop(1, 'rgba(90,110,135,0.6)');
+      c.fillStyle = mg1;
       c.beginPath(); c.moveTo(px, py); c.lineTo(px - pw, py + ph * 0.55); c.lineTo(px + pw, py + ph * 0.55); c.closePath(); c.fill();
-      // Shadow face
-      c.fillStyle = 'rgba(0,0,0,0.22)';
-      c.beginPath(); c.moveTo(px, py); c.lineTo(px + pw * 0.1, py + ph * 0.55); c.lineTo(px + pw, py + ph * 0.55); c.closePath(); c.fill();
-      // Snow cap
-      c.fillStyle = '#E4ECF4';
-      c.beginPath(); c.moveTo(px, py); c.lineTo(px - pw * 0.28, py + ph * 0.16); c.lineTo(px + pw * 0.28, py + ph * 0.16); c.closePath(); c.fill();
-      // Snow highlight
-      c.fillStyle = 'rgba(255,255,255,0.6)';
-      c.beginPath(); c.moveTo(px, py); c.lineTo(px - pw * 0.14, py + ph * 0.08); c.lineTo(px + pw * 0.10, py + ph * 0.10); c.closePath(); c.fill();
+      // Shadow face — soft gradient not hard edge
+      const sh = c.createLinearGradient(px, py, px + pw, py + ph * 0.55);
+      sh.addColorStop(0, 'rgba(20,30,45,0.35)'); sh.addColorStop(1, 'rgba(20,30,45,0)');
+      c.fillStyle = sh;
+      c.beginPath(); c.moveTo(px, py); c.lineTo(px + pw * 0.15, py + ph * 0.55); c.lineTo(px + pw, py + ph * 0.55); c.closePath(); c.fill();
+      // Snow cap — luminous white with soft edges
+      const sg = c.createLinearGradient(px, py, px, py + ph * 0.18);
+      sg.addColorStop(0, 'rgba(240,245,255,0.95)'); sg.addColorStop(1, 'rgba(200,215,235,0)');
+      c.fillStyle = sg;
+      c.beginPath(); c.moveTo(px, py); c.lineTo(px - pw * 0.30, py + ph * 0.18); c.lineTo(px + pw * 0.30, py + ph * 0.18); c.closePath(); c.fill();
     });
-    // Rock striations at base
-    c.strokeStyle = 'rgba(160,185,210,0.30)'; c.lineWidth = 2.5;
-    for (let i = 0; i < 6; i++) {
-      const sx = cx - 120 + Math.random() * 240;
-      const sy = cy + 40 + Math.random() * 120;
+    // Soft rock texture strokes
+    c.save(); c.lineCap = 'round';
+    for (let i = 0; i < 10; i++) {
+      const sx = cx - 150 + Math.random() * 300;
+      const sy = cy + 30 + Math.random() * 140;
       const dx = sx - cx, dy = sy - cy;
       if (dx * dx + dy * dy < SAFE * SAFE) continue;
-      c.beginPath();
-      c.moveTo(sx, sy);
-      c.lineTo(sx + 30 + Math.random() * 40, sy + 20 + Math.random() * 30);
+      c.strokeStyle = `rgba(140,165,195,${0.15 + Math.random() * 0.15})`;
+      c.lineWidth = 2 + Math.random() * 3;
+      c.beginPath(); c.moveTo(sx, sy);
+      c.quadraticCurveTo(sx + 20, sy + 10, sx + 30 + Math.random() * 40, sy + 15 + Math.random() * 25);
       c.stroke();
     }
-    _applyNoiseOverlay(c, S, 0.08, false);
-    _applyHexVignette(c, cx, cy, S, 0.35);
+    c.restore();
+    // Cool-toned brushstrokes
+    _brushStrokes(c, S, '#3A4E60', 0.12, 14);
+    _brushStrokes(c, S, '#6A8098', 0.07, 8);
+    _applyNoiseOverlay(c, S, 0.05, false);
+    _warmGlow(c, S, 0.03); // very subtle warmth even on cold mountains
+    _paperGrain(c, S, 0.028);
+    _applyHexVignette(c, cx, cy, S, 0.32);
 
   } else if (terrain === 'desert') {
-    const bg = c.createLinearGradient(0, 0, S * 0.3, S);
-    bg.addColorStop(0, '#E4C058'); bg.addColorStop(0.5, '#C09828'); bg.addColorStop(1, '#907018');
+    // Storybook desert — warm amber like Disney's Aladdin/Lion King golden sands
+    const bg = c.createRadialGradient(cx, cy * 0.55, 0, cx, cy, S * 0.56);
+    bg.addColorStop(0, '#F0D068'); bg.addColorStop(0.4, '#D4A838'); bg.addColorStop(1, '#9A7418');
     c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    // Heat haze glow
-    const heat = c.createRadialGradient(cx, cy * 0.6, 20, cx, cy * 0.6, S * 0.38);
-    heat.addColorStop(0, 'rgba(255,240,160,0.28)'); heat.addColorStop(1, 'rgba(255,230,140,0)');
+    // Layered sand washes
+    _watercolorWash(c, S, 'rgb(230,190,80)', 0.18, 10);
+    _watercolorWash(c, S, 'rgb(200,150,50)', 0.12, 6);
+    // Warm heat shimmer
+    const heat = c.createRadialGradient(cx, cy * 0.55, 10, cx, cy * 0.6, S * 0.35);
+    heat.addColorStop(0, 'rgba(255,240,170,0.22)'); heat.addColorStop(1, 'rgba(255,220,120,0)');
     c.fillStyle = heat; c.fillRect(0, 0, S, S);
-    // Sand dunes with shadows at edges
-    const dunePts: [number, number, number, number, string, string][] = [
-      [cx - 90, cy + SAFE + 70, 260, 80, '#CCA838', 'rgba(140,90,20,0.25)'],
-      [cx + 100, cy + SAFE + 90, 240, 70, '#BFA030', 'rgba(130,80,15,0.22)'],
-      [cx, cy + SAFE + 120, 300, 60, '#B49828', 'rgba(120,75,10,0.20)'],
-      [cx + 50, cy - SAFE - 40, 200, 55, '#D0AC40', 'rgba(140,90,20,0.18)'],
+    // Soft watercolor dunes — overlapping elliptical washes
+    const dunePts: [number, number, number, number][] = [
+      [cx - 90, cy + SAFE + 70, 260, 85],
+      [cx + 100, cy + SAFE + 90, 240, 75],
+      [cx, cy + SAFE + 120, 300, 65],
+      [cx + 50, cy - SAFE - 40, 200, 60],
     ];
-    dunePts.forEach(([dx, dy, rw, rh, col, shadow]) => {
-      c.fillStyle = col;
+    dunePts.forEach(([dx, dy, rw, rh]) => {
+      // Dune body — gradient wash
+      const dg = c.createRadialGradient(dx, dy - rh * 0.3, 0, dx, dy, rw * 0.6);
+      dg.addColorStop(0, 'rgba(220,180,70,0.40)'); dg.addColorStop(1, 'rgba(180,140,40,0)');
+      c.fillStyle = dg;
       c.beginPath(); c.ellipse(dx, dy, rw, rh, 0, Math.PI, 0); c.closePath(); c.fill();
-      c.fillStyle = shadow;
-      c.beginPath(); c.ellipse(dx + 20, dy + 8, rw * 0.8, rh * 0.5, 0, 0, Math.PI); c.closePath(); c.fill();
+      // Soft shadow wash
+      c.fillStyle = 'rgba(130,85,20,0.15)';
+      c.beginPath(); c.ellipse(dx + 15, dy + 6, rw * 0.7, rh * 0.4, 0, 0, Math.PI); c.closePath(); c.fill();
     });
-    // Cacti at corners
+    // Soft hand-painted cacti
     const cactusPts = _scatterPoints(cx, cy, SAFE * 1.3, 3, S * 0.15, S);
     cactusPts.forEach(([tx, ty]) => {
-      c.fillStyle = '#2A6428';
-      c.beginPath(); c.roundRect(tx - S * 0.012, ty - S * 0.08, S * 0.024, S * 0.10, 4); c.fill();
-      c.beginPath(); c.roundRect(tx - S * 0.045, ty - S * 0.04, S * 0.032, S * 0.012, 3); c.fill();
-      c.beginPath(); c.roundRect(tx - S * 0.045, ty - S * 0.06, S * 0.012, S * 0.028, 3); c.fill();
-      c.beginPath(); c.roundRect(tx + S * 0.01, ty - S * 0.05, S * 0.032, S * 0.012, 3); c.fill();
-      c.beginPath(); c.roundRect(tx + S * 0.018, ty - S * 0.07, S * 0.012, S * 0.028, 3); c.fill();
+      c.save(); c.globalAlpha = 0.7; c.lineCap = 'round'; c.lineJoin = 'round';
+      c.strokeStyle = '#2D6830'; c.lineWidth = S * 0.018;
+      // Main trunk
+      c.beginPath(); c.moveTo(tx, ty + S * 0.04); c.lineTo(tx, ty - S * 0.06); c.stroke();
+      // Arms — curved
+      c.lineWidth = S * 0.012;
+      c.beginPath(); c.moveTo(tx - S * 0.02, ty - S * 0.01);
+      c.quadraticCurveTo(tx - S * 0.04, ty - S * 0.02, tx - S * 0.04, ty - S * 0.045); c.stroke();
+      c.beginPath(); c.moveTo(tx + S * 0.02, ty);
+      c.quadraticCurveTo(tx + S * 0.035, ty - S * 0.01, tx + S * 0.035, ty - S * 0.035); c.stroke();
+      c.restore();
     });
-    // Wind ripples in sand
-    c.strokeStyle = 'rgba(180,140,50,0.20)'; c.lineWidth = 1.5;
-    for (let i = 0; i < 12; i++) {
-      const ry = S * 0.15 + i * (S * 0.06);
-      c.beginPath();
-      c.moveTo(S * 0.1, ry);
-      for (let x = S * 0.1; x < S * 0.9; x += 8) {
-        c.lineTo(x, ry + Math.sin(x * 0.04 + i) * 4);
+    // Soft wind ripple curves
+    c.save(); c.lineCap = 'round';
+    for (let i = 0; i < 10; i++) {
+      const ry = S * 0.15 + i * (S * 0.07);
+      c.strokeStyle = `rgba(190,150,60,${0.12 + Math.random() * 0.08})`; c.lineWidth = 1 + Math.random();
+      c.beginPath(); c.moveTo(S * 0.12, ry);
+      for (let x = S * 0.12; x < S * 0.88; x += 12) {
+        c.quadraticCurveTo(x + 6, ry + Math.sin(x * 0.03 + i) * 5, x + 12, ry + Math.sin((x + 12) * 0.03 + i) * 3);
       }
       c.stroke();
     }
-    _applyNoiseOverlay(c, S, 0.05, true);
-    _applyHexVignette(c, cx, cy, S, 0.22);
+    c.restore();
+    // Sand-toned brushstrokes
+    _brushStrokes(c, S, '#B89030', 0.10, 14);
+    _brushStrokes(c, S, '#D8B850', 0.06, 6);
+    _applyNoiseOverlay(c, S, 0.03, true);
+    _warmGlow(c, S, 0.10);
+    _paperGrain(c, S, 0.022);
+    _applyHexVignette(c, cx, cy, S, 0.20);
   }
 
   c.restore();
@@ -514,81 +652,81 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         <shapeGeometry args={[hexShape]} />
         <meshPhysicalMaterial
           map={getTerrainTexture(hex.terrain)}
-          roughness={isRocky ? 0.6 : 0.8}
-          metalness={isRocky ? 0.15 : 0.0}
+          roughness={isRocky ? 0.88 : 0.95}
+          metalness={0.0}
           roughnessMap={isRocky ? stoneRoughness : undefined}
           bumpMap={isRocky ? stoneRoughness : undefined}
-          bumpScale={isRocky ? 0.02 : 0}
+          bumpScale={isRocky ? 0.015 : 0}
           emissive={mat.emissive}
-          emissiveIntensity={0.12}
-          clearcoat={isRocky ? 0.1 : 0}
-          clearcoatRoughness={0.4}
+          emissiveIntensity={0.10}
+          clearcoat={0}
+          clearcoatRoughness={0}
           onBeforeCompile={onBeforeCompile}
         />
       </mesh>
 
-      {/* Number token — premium embossed coin */}
+      {/* Number token — storybook parchment disc with hand-painted numerals */}
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
         return (
           <group position={[0, mat.height + 0.08, 0]}>
-            {/* Contact shadow — soft, wide */}
+            {/* Soft warm contact shadow */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]}>
-              <circleGeometry args={[0.60, 36]} />
-              <meshBasicMaterial color="#000000" transparent opacity={0.28} />
+              <circleGeometry args={[0.58, 36]} />
+              <meshBasicMaterial color="#1A0C00" transparent opacity={0.22} />
             </mesh>
-            {/* Bronze rim ring — metallic edge band */}
+            {/* Wood rim ring — hand-carved walnut (not metallic) */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]} castShadow>
               <cylinderGeometry args={[0.52, 0.52, 0.06, 44]} />
               <meshStandardMaterial
-                color={hot ? '#8A5A20' : '#7A6830'}
-                roughness={0.35}
-                metalness={0.55}
-                emissive={hot ? '#3A1800' : '#1A1000'}
-                emissiveIntensity={0.10}
+                color={hot ? '#6A3A10' : '#5A4018'}
+                roughness={0.92}
+                metalness={0.0}
+                emissive={hot ? '#1A0800' : '#0A0600'}
+                emissiveIntensity={0.08}
               />
             </mesh>
-            {/* Token disc body — thick, raised, matte parchment */}
+            {/* Parchment disc — aged cream watercolor paper */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
               <cylinderGeometry args={[0.48, 0.48, 0.055, 44]} />
               <meshStandardMaterial
-                color={hot ? '#F5E4CC' : '#F0DFA0'}
-                roughness={0.72}
+                color={hot ? '#F8EDDA' : '#F2E8C8'}
+                roughness={0.95}
                 metalness={0.0}
-                emissive={hot ? '#180808' : '#080400'}
-                emissiveIntensity={hot ? 0.06 : 0.02}
+                emissive={hot ? '#1E0C04' : '#0E0A02'}
+                emissiveIntensity={hot ? 0.08 : 0.03}
               />
             </mesh>
-            {/* Inner recessed circle — gives depth */}
+            {/* Inner decorative ring — faint ink circle like illuminated manuscript */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.028, 0]}>
-              <ringGeometry args={[0.32, 0.44, 36]} />
+              <ringGeometry args={[0.34, 0.42, 36]} />
               <meshStandardMaterial
-                color={hot ? '#E8D0B0' : '#E0D090'}
-                roughness={0.80}
+                color={hot ? '#E8D4B8' : '#E4D8B0'}
+                roughness={0.96}
                 metalness={0.0}
                 side={THREE.DoubleSide}
               />
             </mesh>
-            {/* Number — bold, larger for hot numbers */}
+            {/* Number — hand-painted ink calligraphy */}
             <Text
               position={[0, 0.072, -0.04]}
               rotation={[-Math.PI / 2, 0, 0]}
               fontSize={hot ? 0.46 : 0.38}
-              color={hot ? '#B80808' : '#28160C'}
+              color={hot ? '#A01010' : '#2A1408'}
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.020}
-              outlineColor={hot ? '#500000' : '#1A0A00'}
+              outlineWidth={0.018}
+              outlineColor={hot ? '#400808' : '#14080A'}
               fontWeight={700}
             >
               {String(hex.number)}
             </Text>
-            {/* Probability pips — larger dots */}
+            {/* Probability pips — ink dots */}
             <Text
               position={[0, 0.072, 0.20]}
               rotation={[-Math.PI / 2, 0, 0]}
               fontSize={0.08}
-              color={hot ? '#B80808' : '#5A3C18'}
+              color={hot ? '#A01010' : '#4A2C10'}
               anchorX="center"
               anchorY="middle"
             >
@@ -608,33 +746,33 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         );
       })()}
 
-      {/* Robber — chess-piece style dark figurine */}
+      {/* Robber — storybook dark wood figurine */}
       {hex.hasRobber && (
         <group position={[0, mat.height + 0.02, 0]}>
-          {/* Ground shadow aura */}
+          {/* Warm shadow aura */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
             <circleGeometry args={[0.38, 32]} />
-            <meshBasicMaterial color="#000000" transparent opacity={0.35} />
+            <meshBasicMaterial color="#1A0800" transparent opacity={0.28} />
           </mesh>
-          {/* Broad base */}
+          {/* Broad base — dark walnut wood */}
           <mesh position={[0, 0.04, 0]} castShadow>
-            <cylinderGeometry args={[0.20, 0.24, 0.08, 16]} />
-            <meshStandardMaterial color="#0A0A0A" roughness={0.35} metalness={0.55} />
+            <cylinderGeometry args={[0.20, 0.24, 0.08, 20]} />
+            <meshStandardMaterial color="#1A1008" roughness={0.94} metalness={0.0} />
           </mesh>
-          {/* Body — tapered capsule */}
+          {/* Body — tapered, matte painted */}
           <mesh position={[0, 0.26, 0]} castShadow>
-            <capsuleGeometry args={[0.12, 0.32, 8, 16]} />
-            <meshStandardMaterial color="#0E0E0E" roughness={0.38} metalness={0.50} emissive="#080008" emissiveIntensity={0.15} />
+            <capsuleGeometry args={[0.12, 0.32, 12, 20]} />
+            <meshStandardMaterial color="#201410" roughness={0.96} metalness={0.0} emissive="#080404" emissiveIntensity={0.08} />
           </mesh>
-          {/* Head */}
+          {/* Head — smooth sphere */}
           <mesh position={[0, 0.56, 0]} castShadow>
-            <sphereGeometry args={[0.11, 16, 16]} />
-            <meshStandardMaterial color="#0C0C0C" roughness={0.35} metalness={0.50} />
+            <sphereGeometry args={[0.11, 20, 20]} />
+            <meshStandardMaterial color="#1A1008" roughness={0.96} metalness={0.0} />
           </mesh>
           {/* Hood / pointed cap */}
           <mesh position={[0, 0.68, 0]} castShadow>
-            <coneGeometry args={[0.10, 0.18, 12]} />
-            <meshStandardMaterial color="#100008" roughness={0.50} metalness={0.30} />
+            <coneGeometry args={[0.10, 0.18, 16]} />
+            <meshStandardMaterial color="#18080A" roughness={0.96} metalness={0.0} />
           </mesh>
         </group>
       )}
@@ -658,27 +796,29 @@ function ForestProps() {
       z: (Math.random() - 0.5) * 1.6,
       scale: 0.5 + Math.random() * 0.6,
       rotation: Math.random() * Math.PI,
-    })).filter(t => t.x * t.x + t.z * t.z > 0.25), // Avoid centre (number token area)
+    })).filter(t => t.x * t.x + t.z * t.z > 0.25),
   []);
   return (
     <group>
       {trees.map((t, i) => (
         <group key={i} position={[t.x, 0, t.z]} scale={t.scale} rotation={[0, t.rotation, 0]}>
+          {/* Smooth trunk — warm brown wood */}
           <mesh castShadow position={[0, 0.08, 0]}>
-            <cylinderGeometry args={[0.012, 0.020, 0.22, 6]} />
-            <meshStandardMaterial color="#3A2210" roughness={0.95} />
+            <cylinderGeometry args={[0.014, 0.022, 0.22, 12]} />
+            <meshStandardMaterial color="#4A2E14" roughness={0.96} />
           </mesh>
+          {/* Smooth foliage layers — rounded, soft, hand-painted feel */}
           <mesh castShadow position={[0, 0.28, 0]}>
-            <coneGeometry args={[0.14, 0.36, 7]} />
-            <meshStandardMaterial color="#1A4C10" roughness={0.85} flatShading />
+            <coneGeometry args={[0.14, 0.36, 16]} />
+            <meshStandardMaterial color="#1E5814" roughness={0.96} />
           </mesh>
           <mesh castShadow position={[0, 0.38, 0]} scale={0.78}>
-            <coneGeometry args={[0.11, 0.30, 7]} />
-            <meshStandardMaterial color="#226E18" roughness={0.80} flatShading />
+            <coneGeometry args={[0.11, 0.30, 16]} />
+            <meshStandardMaterial color="#2C7820" roughness={0.96} />
           </mesh>
           <mesh castShadow position={[0, 0.46, 0]} scale={0.56}>
-            <coneGeometry args={[0.09, 0.24, 7]} />
-            <meshStandardMaterial color="#2E8420" roughness={0.75} flatShading />
+            <coneGeometry args={[0.09, 0.24, 16]} />
+            <meshStandardMaterial color="#389428" roughness={0.96} />
           </mesh>
         </group>
       ))}
@@ -705,20 +845,22 @@ function MountainProps() {
     <group>
       {peaks.map((p, i) => (
         <group key={i} position={[p.x, 0, p.z]} scale={[p.sx, p.sy, p.sz]} rotation={[0, p.rot, 0]}>
+          {/* Smooth mountain body — warm slate, painted feel */}
           <mesh castShadow position={[0, 0.30, 0]}>
-            <coneGeometry args={[0.50, 0.65, 5]} />
-            <meshStandardMaterial color="#4A4E5A" roughness={0.88} metalness={0.10} flatShading />
+            <coneGeometry args={[0.50, 0.65, 16]} />
+            <meshStandardMaterial color="#586878" roughness={0.96} metalness={0.0} />
           </mesh>
+          {/* Snow cap — soft luminous cream */}
           <mesh position={[0, 0.52, 0]} scale={[1.0, 0.30, 1.0]}>
-            <coneGeometry args={[0.50, 0.65, 5]} />
-            <meshStandardMaterial color="#E8E8F0" roughness={0.15} emissive="#FFFFFF" emissiveIntensity={0.04} flatShading />
+            <coneGeometry args={[0.50, 0.65, 16]} />
+            <meshStandardMaterial color="#F0EEF4" roughness={0.92} emissive="#E8E4F0" emissiveIntensity={0.06} />
           </mesh>
         </group>
       ))}
       {rocks.map((r, i) => (
         <mesh key={`r${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={r.r} castShadow>
           <dodecahedronGeometry />
-          <meshStandardMaterial color="#2A2E38" roughness={0.90} metalness={0.05} />
+          <meshStandardMaterial color="#3A404A" roughness={0.96} metalness={0.0} />
         </mesh>
       ))}
     </group>
@@ -733,7 +875,7 @@ function HillsProps() {
       sx: 0.25 + Math.random() * 0.20,
       sy: 0.12 + Math.random() * 0.15,
       sz: 0.25 + Math.random() * 0.20,
-      col: ['#6A4220', '#7A5430', '#553018'][Math.floor(Math.random() * 3)],
+      col: ['#8A5028', '#9A6038', '#704020'][Math.floor(Math.random() * 3)],
     })).filter(m => m.x * m.x + m.z * m.z > 0.18),
   []);
   const smallRocks = useMemo(() =>
@@ -747,14 +889,14 @@ function HillsProps() {
     <group>
       {mounds.map((m, i) => (
         <mesh key={i} position={[m.x, m.sy * 0.5, m.z]} scale={[m.sx, m.sy, m.sz]} castShadow receiveShadow>
-          <sphereGeometry args={[1, 16, 16]} />
-          <meshStandardMaterial color={m.col} roughness={0.95} flatShading />
+          <sphereGeometry args={[1, 24, 24]} />
+          <meshStandardMaterial color={m.col} roughness={0.97} />
         </mesh>
       ))}
       {smallRocks.map((r, i) => (
         <mesh key={`hr${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={[Math.random(), Math.random(), 0]} castShadow>
           <dodecahedronGeometry />
-          <meshStandardMaterial color={Math.random() > 0.5 ? '#555' : '#3A3A3A'} roughness={0.70} metalness={0.20} />
+          <meshStandardMaterial color={Math.random() > 0.5 ? '#5A4A3A' : '#4A3A2A'} roughness={0.96} metalness={0.0} />
         </mesh>
       ))}
     </group>
@@ -768,7 +910,7 @@ function FieldsProps() {
       z: (Math.random() - 0.5) * 1.5,
       rot: Math.random() * Math.PI,
       scale: 0.5 + Math.random() * 0.5,
-      col: Math.random() > 0.3 ? '#D4A520' : '#B89018',
+      col: Math.random() > 0.3 ? '#E0B830' : '#C89820',
     })).filter(s => s.x * s.x + s.z * s.z > 0.22),
   []);
   return (
@@ -776,13 +918,13 @@ function FieldsProps() {
       {stalks.map((s, i) => (
         <mesh key={i} position={[s.x, 0.08, s.z]} rotation={[0, s.rot, 0]} scale={s.scale} castShadow>
           <boxGeometry args={[0.012, 0.16, 0.012]} />
-          <meshStandardMaterial color={s.col} roughness={0.50} />
+          <meshStandardMaterial color={s.col} roughness={0.96} />
         </mesh>
       ))}
       {[-0.4, -0.15, 0.10, 0.35].map((x, i) => (
         <mesh key={`f${i}`} position={[x, 0.005, 0]} receiveShadow>
           <boxGeometry args={[0.04, 0.01, 1.2]} />
-          <meshStandardMaterial color="#3A2010" roughness={1} />
+          <meshStandardMaterial color="#4A2C14" roughness={0.97} />
         </mesh>
       ))}
     </group>
@@ -801,7 +943,7 @@ function PastureProps() {
     Array.from({ length: 16 }).map(() => ({
       x: (Math.random() - 0.5) * 1.3,
       z: (Math.random() - 0.5) * 1.3,
-      col: ['#FFF', '#FFEA00', '#FF006E', '#7209B7'][Math.floor(Math.random() * 4)],
+      col: ['#FFF8E0', '#FFD840', '#FF7098', '#A060D0'][Math.floor(Math.random() * 4)],
     })).filter(f => f.x * f.x + f.z * f.z > 0.20),
   []);
   const sheep = useMemo(() => [
@@ -811,25 +953,25 @@ function PastureProps() {
     <group>
       {grassClumps.map((g, i) => (
         <mesh key={i} position={[g.x, g.s * 0.3, g.z]} scale={g.s}>
-          <sphereGeometry args={[1, 8, 8]} />
-          <meshStandardMaterial color="#4CA030" roughness={0.95} />
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshStandardMaterial color="#5CB838" roughness={0.97} />
         </mesh>
       ))}
       {flowers.map((f, i) => (
         <mesh key={`fl${i}`} position={[f.x, 0.04, f.z]}>
-          <sphereGeometry args={[0.018, 6, 6]} />
-          <meshBasicMaterial color={f.col} />
+          <sphereGeometry args={[0.018, 10, 10]} />
+          <meshStandardMaterial color={f.col} roughness={0.96} emissive={f.col} emissiveIntensity={0.08} />
         </mesh>
       ))}
       {sheep.map((s, i) => (
         <group key={`sh${i}`} position={[s.x, 0.055, s.z]} scale={0.06}>
           <mesh castShadow>
-            <sphereGeometry args={[1, 10, 10]} />
-            <meshStandardMaterial color="#F0F0F0" roughness={0.95} />
+            <sphereGeometry args={[1, 16, 16]} />
+            <meshStandardMaterial color="#F8F4E8" roughness={0.97} />
           </mesh>
           <mesh position={[0.9, 0.4, 0]} scale={0.35}>
-            <sphereGeometry />
-            <meshStandardMaterial color="#1A1A1A" roughness={0.90} />
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshStandardMaterial color="#2A1A10" roughness={0.96} />
           </mesh>
         </group>
       ))}
@@ -840,22 +982,24 @@ function PastureProps() {
 function DesertProps() {
   return (
     <group>
+      {/* Smooth sand dune mounds */}
       <mesh position={[0.25, 0.03, 0.12]} rotation={[0.08, 0.2, 0.08]} castShadow>
-        <sphereGeometry args={[0.30, 12, 12]} />
-        <meshStandardMaterial color="#C87A06" roughness={0.95} flatShading />
+        <sphereGeometry args={[0.30, 24, 24]} />
+        <meshStandardMaterial color="#D8A030" roughness={0.97} />
       </mesh>
       <mesh position={[-0.30, 0.02, -0.20]} rotation={[-0.06, -0.3, 0]} castShadow>
-        <sphereGeometry args={[0.22, 12, 12]} />
-        <meshStandardMaterial color="#A06008" roughness={0.95} flatShading />
+        <sphereGeometry args={[0.22, 24, 24]} />
+        <meshStandardMaterial color="#C08820" roughness={0.97} />
       </mesh>
+      {/* Hand-painted cactus — smooth cylinders */}
       <group position={[0.12, 0.06, -0.35]} scale={0.4}>
         <mesh castShadow>
-          <cylinderGeometry args={[0.025, 0.025, 0.18, 6]} />
-          <meshStandardMaterial color="#166534" roughness={0.85} />
+          <cylinderGeometry args={[0.025, 0.025, 0.18, 12]} />
+          <meshStandardMaterial color="#2A7038" roughness={0.96} />
         </mesh>
         <mesh position={[0.04, 0.04, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.018, 0.018, 0.08, 6]} />
-          <meshStandardMaterial color="#166534" roughness={0.85} />
+          <cylinderGeometry args={[0.018, 0.018, 0.08, 12]} />
+          <meshStandardMaterial color="#2A7038" roughness={0.96} />
         </mesh>
       </group>
     </group>
@@ -944,114 +1088,114 @@ function Building3D({ position, type, color }: Building3DProps) {
   }, [color]);
 
   if (type === 'city') {
-    // City: large keep + round tower + side wing — painted miniature style
+    // City: storybook castle miniature — matte hand-painted wood/clay feel
     return (
       <group position={position}>
-        {/* Contact shadow */}
+        {/* Warm contact shadow */}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
           <circleGeometry args={[0.30, 24]} />
-          <meshBasicMaterial color="#000000" transparent opacity={0.30} />
+          <meshBasicMaterial color="#1A0C00" transparent opacity={0.24} />
         </mesh>
-        {/* Foundation slab */}
+        {/* Foundation slab — warm stone */}
         <mesh position={[0, 0.02, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.34, 0.04, 0.24]} />
-          <meshStandardMaterial color="#3A3028" roughness={0.92} metalness={0.0} />
+          <meshStandardMaterial color="#4A3C28" roughness={0.96} metalness={0.0} />
         </mesh>
-        {/* Main keep */}
+        {/* Main keep — matte painted */}
         <mesh position={[0, 0.16, 0]} castShadow receiveShadow>
           <boxGeometry args={[0.22, 0.28, 0.18]} />
-          <meshStandardMaterial color={color} roughness={0.75} metalness={0.08} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.008} />
+          <meshStandardMaterial color={color} roughness={0.94} metalness={0.0} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.006} />
         </mesh>
-        {/* Keep peaked roof */}
+        {/* Keep peaked roof — matte clay */}
         <mesh position={[0, 0.35, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
           <coneGeometry args={[0.17, 0.12, 4]} />
-          <meshStandardMaterial color={roofColor} roughness={0.85} metalness={0.05} roughnessMap={woodTex} />
+          <meshStandardMaterial color={roofColor} roughness={0.96} metalness={0.0} roughnessMap={woodTex} />
         </mesh>
-        {/* Round tower */}
+        {/* Round tower — smooth painted cylinder */}
         <mesh position={[0.12, 0.22, 0.06]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.07, 0.08, 0.40, 12]} />
-          <meshStandardMaterial color={color} roughness={0.72} metalness={0.10} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.006} />
+          <cylinderGeometry args={[0.07, 0.08, 0.40, 16]} />
+          <meshStandardMaterial color={color} roughness={0.94} metalness={0.0} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.004} />
         </mesh>
         {/* Tower conical roof */}
         <mesh position={[0.12, 0.46, 0.06]} castShadow>
-          <coneGeometry args={[0.09, 0.10, 12]} />
-          <meshStandardMaterial color={roofColor} roughness={0.80} metalness={0.05} />
+          <coneGeometry args={[0.09, 0.10, 16]} />
+          <meshStandardMaterial color={roofColor} roughness={0.96} metalness={0.0} />
         </mesh>
-        {/* Tower battlements — tiny boxes on top */}
+        {/* Tower battlements */}
         {[0, Math.PI/2, Math.PI, Math.PI*1.5].map((a, i) => (
           <mesh key={i} position={[0.12 + Math.cos(a)*0.065, 0.42, 0.06 + Math.sin(a)*0.065]} castShadow>
             <boxGeometry args={[0.025, 0.04, 0.025]} />
-            <meshStandardMaterial color={color} roughness={0.80} metalness={0.08} />
+            <meshStandardMaterial color={color} roughness={0.94} metalness={0.0} />
           </mesh>
         ))}
         {/* Side wing */}
         <mesh position={[-0.10, 0.10, -0.02]} castShadow receiveShadow>
           <boxGeometry args={[0.12, 0.16, 0.14]} />
-          <meshStandardMaterial color={color} roughness={0.78} metalness={0.08} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.006} />
+          <meshStandardMaterial color={color} roughness={0.94} metalness={0.0} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.004} />
         </mesh>
         {/* Side wing roof */}
         <mesh position={[-0.10, 0.21, -0.02]} rotation={[0, 0, 0]} castShadow>
           <coneGeometry args={[0.10, 0.08, 4]} />
-          <meshStandardMaterial color={roofColor} roughness={0.85} />
+          <meshStandardMaterial color={roofColor} roughness={0.96} />
         </mesh>
-        {/* Door */}
+        {/* Door — warm wood */}
         <mesh position={[0, 0.06, 0.092]}>
           <boxGeometry args={[0.04, 0.07, 0.005]} />
-          <meshStandardMaterial color="#2A1808" roughness={0.95} />
+          <meshStandardMaterial color="#3A2010" roughness={0.97} />
         </mesh>
-        {/* Windows — tiny bright squares */}
+        {/* Windows — warm candlelight glow */}
         {[[0.06, 0.18, 0.092], [-0.06, 0.18, 0.092], [0, 0.22, 0.092]].map(([wx, wy, wz], i) => (
           <mesh key={`w${i}`} position={[wx, wy, wz]}>
             <boxGeometry args={[0.022, 0.025, 0.003]} />
-            <meshStandardMaterial color="#FFE880" emissive="#FFD040" emissiveIntensity={0.50} roughness={0.3} />
+            <meshStandardMaterial color="#FFE888" emissive="#FFD048" emissiveIntensity={0.40} roughness={0.5} />
           </mesh>
         ))}
       </group>
     );
   }
 
-  // Settlement: cozy cottage with chimney — painted miniature style
+  // Settlement: storybook cozy cottage — matte hand-painted miniature
   return (
     <group position={position}>
-      {/* Contact shadow */}
+      {/* Warm contact shadow */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
         <circleGeometry args={[0.20, 20]} />
-        <meshBasicMaterial color="#000000" transparent opacity={0.28} />
+        <meshBasicMaterial color="#1A0C00" transparent opacity={0.22} />
       </mesh>
-      {/* Foundation */}
+      {/* Foundation — warm stone */}
       <mesh position={[0, 0.015, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.20, 0.03, 0.16]} />
-        <meshStandardMaterial color="#3A3028" roughness={0.92} metalness={0.0} />
+        <meshStandardMaterial color="#4A3C28" roughness={0.96} metalness={0.0} />
       </mesh>
-      {/* Walls */}
+      {/* Walls — matte painted */}
       <mesh position={[0, 0.10, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.16, 0.17, 0.13]} />
-        <meshStandardMaterial color={color} roughness={0.78} metalness={0.08} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.008} />
+        <meshStandardMaterial color={color} roughness={0.94} metalness={0.0} roughnessMap={stoneTex} bumpMap={stoneTex} bumpScale={0.006} />
       </mesh>
-      {/* Peaked roof */}
+      {/* Peaked roof — matte clay */}
       <mesh position={[0, 0.23, 0]} rotation={[0, Math.PI / 4, 0]} castShadow>
         <coneGeometry args={[0.14, 0.10, 4]} />
-        <meshStandardMaterial color={roofColor} roughness={0.82} metalness={0.05} roughnessMap={woodTex} bumpMap={woodTex} bumpScale={0.004} />
+        <meshStandardMaterial color={roofColor} roughness={0.96} metalness={0.0} roughnessMap={woodTex} bumpMap={woodTex} bumpScale={0.003} />
       </mesh>
-      {/* Chimney */}
+      {/* Chimney — warm brick */}
       <mesh position={[0.05, 0.25, -0.03]} castShadow>
         <boxGeometry args={[0.03, 0.08, 0.03]} />
-        <meshStandardMaterial color="#4A3020" roughness={0.90} metalness={0.0} />
+        <meshStandardMaterial color="#5A3828" roughness={0.96} metalness={0.0} />
       </mesh>
-      {/* Chimney smoke (tiny translucent sphere) */}
+      {/* Chimney smoke */}
       <mesh position={[0.05, 0.32, -0.03]}>
-        <sphereGeometry args={[0.02, 8, 8]} />
-        <meshBasicMaterial color="#888888" transparent opacity={0.15} />
+        <sphereGeometry args={[0.02, 12, 12]} />
+        <meshBasicMaterial color="#A09888" transparent opacity={0.12} />
       </mesh>
-      {/* Door */}
+      {/* Door — warm wood */}
       <mesh position={[0, 0.05, 0.067]}>
         <boxGeometry args={[0.035, 0.06, 0.004]} />
-        <meshStandardMaterial color="#2A1808" roughness={0.95} />
+        <meshStandardMaterial color="#3A2010" roughness={0.97} />
       </mesh>
-      {/* Window */}
+      {/* Window — warm candlelight */}
       <mesh position={[0.05, 0.13, 0.067]}>
         <boxGeometry args={[0.022, 0.025, 0.003]} />
-        <meshStandardMaterial color="#FFE880" emissive="#FFD040" emissiveIntensity={0.40} roughness={0.3} />
+        <meshStandardMaterial color="#FFE888" emissive="#FFD048" emissiveIntensity={0.35} roughness={0.5} />
       </mesh>
     </group>
   );
@@ -1094,13 +1238,13 @@ function Road3D({ from, to, color }: Road3DProps) {
         <boxGeometry args={[length * 0.92, 0.05, 0.09]} />
         <meshStandardMaterial
           color={color}
-          roughness={0.75}
-          metalness={0.08}
+          roughness={0.94}
+          metalness={0.0}
           roughnessMap={weatheredWood}
           bumpMap={weatheredWood}
-          bumpScale={0.006}
+          bumpScale={0.004}
           emissive={color}
-          emissiveIntensity={hovered ? 0.55 : 0.06}
+          emissiveIntensity={hovered ? 0.45 : 0.05}
         />
       </mesh>
       {/* Dark underside bed — gives depth illusion */}
@@ -1760,12 +1904,13 @@ function PlayerPresence3D({ gameState }: { gameState: GameState }) {
 interface BoardContentProps {
   gameState: GameState;
   presencePlayers?: Presence3DPlayer[];
+  resourceAnimations?: ResourceAnimation[];
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
 }
 
-function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
+function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick }: BoardContentProps) {
   const orbitRef = useRef<any>(null);
   useKeyboardControls(orbitRef);
 
@@ -1781,14 +1926,14 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
           CINEMATIC LIGHTING RIG — warm museum-gallery tabletop feel
           7 light sources for depth, drama, and realistic PBR response
           ══════════════════════════════════════════════════════════════════ */}
-      {/* Ambient: very low, warm, prevents pure-black shadows */}
-      <ambientLight intensity={0.28} color="#F0E0C8" />
+      {/* Ambient: warm golden, like candlelight in a storybook cottage */}
+      <ambientLight intensity={0.35} color="#F8E8D0" />
 
-      {/* KEY — warm golden overhead, primary shadow caster */}
+      {/* KEY — soft warm golden overhead (Disney golden-hour, not harsh) */}
       <directionalLight
         position={[6, 28, 5]}
-        intensity={1.8}
-        color="#FFF4E0"
+        intensity={1.5}
+        color="#FFE8C0"
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
@@ -1801,32 +1946,32 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
         shadow-normalBias={0.02}
       />
 
-      {/* FILL — cool blue opposite side, lifts shadow detail */}
-      <directionalLight position={[-12, 16, -10]} intensity={0.35} color="#A0BCD8" />
+      {/* FILL — warm lavender (not cold blue, storybook shadow tones) */}
+      <directionalLight position={[-12, 16, -10]} intensity={0.30} color="#C8B8D8" />
 
-      {/* RIM — subtle warm-violet back-light for silhouette separation */}
-      <directionalLight position={[0, 8, -22]} intensity={0.22} color="#D0B8E0" />
+      {/* RIM — warm amber back-light for that sunset silhouette */}
+      <directionalLight position={[0, 8, -22]} intensity={0.20} color="#E0C8A0" />
 
-      {/* WARM BOUNCE — simulates table surface light reflection upward */}
-      <pointLight position={[0, 1.5, 0]} intensity={0.55} color="#FFD090" distance={20} decay={2} />
+      {/* WARM BOUNCE — stronger table reflection for storybook warmth */}
+      <pointLight position={[0, 1.5, 0]} intensity={0.70} color="#FFD890" distance={20} decay={2} />
 
-      {/* OVERHEAD SPOT — focused pool of warm light on board centre */}
+      {/* OVERHEAD SPOT — gentle golden pool on board */}
       <spotLight
         position={[0, 24, 0]}
-        angle={0.42}
-        penumbra={0.6}
-        intensity={1.2}
-        color="#FFF0D8"
+        angle={0.45}
+        penumbra={0.7}
+        intensity={1.0}
+        color="#FFE8C8"
         distance={40}
         decay={1.8}
         castShadow={false}
       />
 
-      {/* LEFT ACCENT — cool side kick for depth + color contrast */}
-      <pointLight position={[-14, 5, 2]} intensity={0.20} color="#90A8C8" distance={22} decay={2} />
+      {/* LEFT ACCENT — very subtle warm blue (storybook cool accent) */}
+      <pointLight position={[-14, 5, 2]} intensity={0.14} color="#B0C0D8" distance={22} decay={2} />
 
-      {/* RIGHT WARM ACCENT — adds warmth asymmetry */}
-      <pointLight position={[12, 4, -3]} intensity={0.16} color="#E8C888" distance={20} decay={2} />
+      {/* RIGHT WARM ACCENT — honey gold warmth */}
+      <pointLight position={[12, 4, -3]} intensity={0.20} color="#F0D098" distance={20} decay={2} />
 
       {/* Camera */}
       <PerspectiveCamera makeDefault position={[0, 19, 4.5]} fov={38} />
@@ -1850,17 +1995,17 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
         color="#000000"
       />
 
-      {/* Post-processing effects pipeline */}
+      {/* Post-processing — storybook warmth pipeline */}
       <EffectComposer multisampling={8}>
         <Bloom
-          luminanceThreshold={0.9}
-          luminanceSmoothing={0.4}
-          intensity={0.18}
+          luminanceThreshold={0.78}
+          luminanceSmoothing={0.5}
+          intensity={0.22}
           mipmapBlur
         />
-        <DepthOfField focusDistance={0.015} focalLength={0.02} bokehScale={1.2} height={1080} />
-        <Vignette eskil={false} offset={0.2} darkness={0.5} />
-        <Noise premultiply opacity={0.006} />
+        <DepthOfField focusDistance={0.015} focalLength={0.018} bokehScale={1.5} height={1080} />
+        <Vignette eskil={false} offset={0.15} darkness={0.55} />
+        <Noise premultiply opacity={0.008} />
         <SMAA />
       </EffectComposer>
 
@@ -1954,6 +2099,11 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
         <CatanPresence3D players={presencePlayers} />
       )}
 
+      {/* 3D Resource Flow — animated tokens flying hex → player */}
+      {resourceAnimations && resourceAnimations.length > 0 && (
+        <ResourceFlow3D animations={resourceAnimations} />
+      )}
+
       {/* Spatial Ambience — 3D positioned ambient audio infrastructure */}
       <SpatialAmbience />
 
@@ -2008,13 +2158,14 @@ function BoardContent({ gameState, presencePlayers, onHexClick, onVertexClick, o
 interface CatanBoard3DProps {
   gameState: GameState;
   presencePlayers?: Presence3DPlayer[];
+  resourceAnimations?: ResourceAnimation[];
   onHexClick?: (hexId: number) => void;
   onVertexClick?: (vertexId: string) => void;
   onEdgeClick?: (edgeId: string) => void;
 }
 
 export default function CatanBoard3D({ 
-  gameState, presencePlayers, onHexClick, onVertexClick, onEdgeClick
+  gameState, presencePlayers, resourceAnimations, onHexClick, onVertexClick, onEdgeClick
 }: CatanBoard3DProps) {
   return (
     <div className="w-full h-full bg-black overflow-hidden relative">
@@ -2035,6 +2186,7 @@ export default function CatanBoard3D({
             <BoardContent
               gameState={gameState}
               presencePlayers={presencePlayers}
+              resourceAnimations={resourceAnimations}
               onHexClick={onHexClick}
               onVertexClick={onVertexClick}
               onEdgeClick={onEdgeClick}
