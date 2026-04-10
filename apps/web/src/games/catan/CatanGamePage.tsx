@@ -688,6 +688,8 @@ export default function CatanGamePage() {
   const [rollKey, setRollKey] = useState(0);
   const [productionLog, setProductionLog] = useState<ProductionEntry[]>([]);
   const [showTradePanel, setShowTradePanel] = useState(false);
+  const [showIntroAnimation, setShowIntroAnimation] = useState(true);
+  const [introPhase, setIntroPhase] = useState<'shuffle' | 'letters' | 'numbers'>('shuffle');
 
   // ── New HUD feature toggles ────────────────────────────────────────────
   const [showTutorial, setShowTutorial] = useState(false);
@@ -795,6 +797,32 @@ export default function CatanGamePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.currentPlayerIndex, gameState.phase]);
+
+  // ── Intro Animation Sequence ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!showIntroAnimation) return;
+
+    // Phase 1: Shuffle hexes (2 seconds)
+    const shuffleTimeout = setTimeout(() => {
+      setIntroPhase('letters');
+    }, 2000);
+
+    // Phase 2: Show alphabetical letters (2 seconds)
+    const lettersTimeout = setTimeout(() => {
+      setIntroPhase('numbers');
+    }, 4000);
+
+    // Phase 3: Reveal actual numbers (1 second)
+    const numbersTimeout = setTimeout(() => {
+      setShowIntroAnimation(false);
+    }, 5000);
+
+    return () => {
+      clearTimeout(shuffleTimeout);
+      clearTimeout(lettersTimeout);
+      clearTimeout(numbersTimeout);
+    };
+  }, [showIntroAnimation]);
 
   // ── Lobby start handler ───────────────────────────────────────────────────
   const handleLobbyStart = useCallback((config: LobbyConfig) => {
@@ -1120,6 +1148,43 @@ export default function CatanGamePage() {
 
   return (
     <div className="h-[100dvh] w-screen overflow-hidden relative bg-gradient-to-br from-blue-950 via-cyan-950 to-emerald-950 select-none">
+      {/* === INTRO ANIMATION OVERLAY === */}
+      {showIntroAnimation && (
+        <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm">
+          <div className="text-center">
+            <div className="mb-8">
+              <h1 className="text-6xl font-bold text-white mb-4">CATAN</h1>
+              <p className="text-2xl text-slate-300">
+                {introPhase === 'shuffle' && 'Shuffling Hexagons...'}
+                {introPhase === 'letters' && 'Assigning Numbers in Alphabetical Order...'}
+                {introPhase === 'numbers' && 'Revealing Numbers...'}
+              </p>
+            </div>
+            <div className="flex gap-4 justify-center">
+              {introPhase === 'shuffle' && (
+                <>
+                  <div className="w-16 h-16 bg-amber-600 rounded-lg animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-16 h-16 bg-green-600 rounded-lg animate-bounce" style={{ animationDelay: '100ms' }}></div>
+                  <div className="w-16 h-16 bg-blue-600 rounded-lg animate-bounce" style={{ animationDelay: '200ms' }}></div>
+                  <div className="w-16 h-16 bg-yellow-600 rounded-lg animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="w-16 h-16 bg-gray-600 rounded-lg animate-bounce" style={{ animationDelay: '400ms' }}></div>
+                </>
+              )}
+              {introPhase === 'letters' && (
+                <div className="text-4xl font-bold text-white">
+                  A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+                </div>
+              )}
+              {introPhase === 'numbers' && (
+                <div className="text-4xl font-bold text-white">
+                  2 3 4 5 6 7 8 9 10 11 12
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* === FULL-SCREEN 3D BOARD === */}
       <div className="absolute inset-0 z-0">
         <CatanBoard3D
