@@ -1124,7 +1124,7 @@ export default function CatanGamePage() {
         />
       </div>
 
-      {/* === VERTEX BUILD POPUP — +/- UI with build options === */}
+      {/* === VERTEX POPUP — Bank resource management with -/+ === */}
       <AnimatePresence>
         {selectedVertex && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
@@ -1132,10 +1132,10 @@ export default function CatanGamePage() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="pointer-events-auto bg-slate-900/95 border border-slate-600 rounded-2xl p-5 shadow-2xl max-w-sm w-full mx-4"
+              className="pointer-events-auto bg-slate-900/95 border border-slate-600 rounded-2xl p-5 shadow-2xl max-w-md w-full mx-4"
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-semibold text-lg">Build Options</h3>
+                <h3 className="text-white font-semibold text-lg">Bank Resource Management</h3>
                 <button
                   onClick={() => setSelectedVertex(null)}
                   className="text-slate-400 hover:text-white transition-colors"
@@ -1144,64 +1144,73 @@ export default function CatanGamePage() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
-                {/* Left side: - (cancel) */}
-                <button
-                  onClick={() => setSelectedVertex(null)}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold text-2xl py-4 rounded-xl transition-all active:scale-95"
-                >
-                  −
-                </button>
+              <div className="space-y-3">
+                {(['wood', 'brick', 'sheep', 'wheat', 'ore'] as ResourceType[]).map(resource => {
+                  const player = getCurrentPlayer(gameState);
+                  const count = player.resources[resource];
+                  const emoji = ResourceEmoji[resource];
 
-                {/* Right side: + (build options) */}
-                <div className="flex-1 flex flex-col gap-2">
-                  {(() => {
-                    const player = getCurrentPlayer(gameState);
-                    const canSettlement = canBuildSettlement(gameState, player.id, selectedVertex, false);
-                    const canCity = canBuildCity(gameState, player.id, selectedVertex);
-
-                    return (
-                      <>
-                        {canSettlement && (
-                          <button
-                            onClick={() => {
-                              setGameState(prev => buildSettlement(prev, player.id, selectedVertex));
-                              setSelectedVertex(null);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold py-2 px-3 rounded-lg transition-all active:scale-95 flex items-center gap-2"
-                          >
-                            <span>🏠</span>
-                            <span>Settlement</span>
-                            <span className="text-xs opacity-75">
-                              ({BUILDING_COSTS.settlement.wood || 0}🪵 {(BUILDING_COSTS.settlement.brick || 0)}🧱 {(BUILDING_COSTS.settlement.sheep || 0)}🐑 {(BUILDING_COSTS.settlement.wheat || 0)}🌾)
-                            </span>
-                          </button>
-                        )}
-                        {canCity && (
-                          <button
-                            onClick={() => {
-                              setGameState(prev => buildCity(prev, player.id, selectedVertex));
-                              setSelectedVertex(null);
-                            }}
-                            className="bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold py-2 px-3 rounded-lg transition-all active:scale-95 flex items-center gap-2"
-                          >
-                            <span>🏙</span>
-                            <span>City</span>
-                            <span className="text-xs opacity-75">
-                              ({BUILDING_COSTS.city.ore || 0}⛏️ {(BUILDING_COSTS.city.wheat || 0)}🌾 x2)
-                            </span>
-                          </button>
-                        )}
-                        {!canSettlement && !canCity && (
-                          <p className="text-slate-400 text-sm text-center py-2">
-                            Cannot build here
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
+                  return (
+                    <div key={resource} className="flex items-center gap-3 bg-slate-800/50 p-3 rounded-lg">
+                      <span className="text-2xl">{emoji}</span>
+                      <span className="text-white font-semibold w-16">{count}</span>
+                      <button
+                        onClick={() => {
+                          // Withdraw from bank (add to player)
+                          setGameState(prev => {
+                            const idx = prev.players.findIndex(p => p.id === player.id);
+                            if (idx === -1) return prev;
+                            const updated = [...prev.players];
+                            updated[idx] = {
+                              ...updated[idx],
+                              resources: {
+                                ...updated[idx].resources,
+                                [resource]: updated[idx].resources[resource] + 1,
+                              },
+                            };
+                            return { ...prev, players: updated };
+                          });
+                        }}
+                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xl py-2 rounded-lg transition-all active:scale-95"
+                      >
+                        +
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Deposit to bank (remove from player)
+                          if (count > 0) {
+                            setGameState(prev => {
+                              const idx = prev.players.findIndex(p => p.id === player.id);
+                              if (idx === -1) return prev;
+                              const updated = [...prev.players];
+                              updated[idx] = {
+                                ...updated[idx],
+                                resources: {
+                                  ...updated[idx].resources,
+                                  [resource]: updated[idx].resources[resource] - 1,
+                                },
+                              };
+                              return { ...prev, players: updated };
+                            });
+                          }
+                        }}
+                        disabled={count === 0}
+                        className={`flex-1 font-bold text-xl py-2 rounded-lg transition-all active:scale-95 ${
+                          count > 0
+                            ? 'bg-slate-700 hover:bg-slate-600 text-white'
+                            : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        −
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+
+              <p className="text-slate-400 text-xs mt-4 text-center">
+                Click + to withdraw from bank, − to deposit to bank
+              </p>
             </motion.div>
           </div>
         )}

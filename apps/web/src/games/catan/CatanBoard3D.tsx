@@ -17,6 +17,7 @@ import {
   type GameState,
   type HexTile,
   type Vertex,
+  TERRAIN_RESOURCES,
 } from './CatanEngine';
 import { CatanPresence3D, type Presence3DPlayer } from './CatanPresence3D';
 import { ResourceFlow3D, type ResourceAnimation } from './CatanResourceFlow';
@@ -585,17 +586,12 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
   const stoneRoughness = useMemo(() => getProceduralTexture('stone'), []);
 
   const hexShape  = useMemo(() => createHexShape(HEX_SIZE), []);
-  const seam      = useMemo(() => createHexShape(HEX_SIZE * 1.003), []);
   const extrudeSettings = useMemo(() => ({
     depth: mat.height,
     bevelEnabled: true,
     bevelThickness: 0.014,
     bevelSize: 0.014,
     bevelSegments: 2,
-  }), [mat.height]);
-  const seamSettings = useMemo(() => ({
-    depth: mat.height + 0.01,
-    bevelEnabled: false,
   }), [mat.height]);
 
   const isRocky = hex.terrain === 'mountains' || hex.terrain === 'hills';
@@ -622,12 +618,6 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
 
   return (
     <group position={[pos[0], 0, pos[2]]}>
-      {/* Dark seam border — renders behind body */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.004, 0]} receiveShadow>
-        <extrudeGeometry args={[seam, seamSettings]} />
-        <meshStandardMaterial color="#100C06" roughness={1} />
-      </mesh>
-
       {/* Hex body */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
@@ -1854,65 +1844,60 @@ function PlayerPresence3D({ gameState }: { gameState: GameState }) {
 // BUILD MARKERS — Animated pulsing indicators for buildable spots
 // ============================================================================
 
-function VertexBuildMarker({ position, vertexId, onClick }: {
+function VertexBuildMarker({ position, vertexId, onClick, color }: {
   position: [number, number, number];
   vertexId: string;
   onClick: (id: string) => void;
+  color: string;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const dotRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
   useFrame(({ clock }) => {
-    if (!meshRef.current) return;
+    if (!dotRef.current) return;
     const t = clock.elapsedTime;
     // Subtle vertical bob
-    meshRef.current.position.y = position[1] + 0.15 + Math.sin(t * 1.5) * 0.03;
+    dotRef.current.position.y = position[1] + 0.12 + Math.sin(t * 1.5) * 0.02;
     // Subtle pulse
     const pulse = 1.0 + Math.sin(t * 1.2) * 0.05;
-    meshRef.current.scale.setScalar(hovered ? pulse * 1.15 : pulse);
+    dotRef.current.scale.setScalar(hovered ? pulse * 1.2 : pulse);
   });
 
   return (
     <group>
-      {/* Subtle outline circle ring */}
+      {/* Small dot colored by resource type */}
       <mesh
-        ref={meshRef}
+        ref={dotRef}
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[position[0], position[1] + 0.15, position[2]]}
+        position={[position[0], position[1] + 0.12, position[2]]}
         onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
       >
-        <ringGeometry args={[0.35, 0.42, 32]} />
-        <meshStandardMaterial
-          color={hovered ? '#FFFFFF' : '#FFD700'}
-          transparent
-          opacity={hovered ? 0.9 : 0.6}
-          side={THREE.DoubleSide}
-        />
+        <circleGeometry args={[0.06, 16]} />
+        <meshBasicMaterial color={hovered ? '#FFFFFF' : color} />
       </mesh>
 
-      {/* Small dot at center */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[position[0], position[1] + 0.155, position[2]]}
-        onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
-      >
-        <circleGeometry args={[0.08, 16]} />
-        <meshBasicMaterial color={hovered ? '#FFFFFF' : '#FFD700'} />
-      </mesh>
+      {/* Smaller outline on hover - half size of original */}
+      {hovered && (
+        <mesh
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[position[0], position[1] + 0.12, position[2]]}
+        >
+          <ringGeometry args={[0.09, 0.12, 32]} />
+          <meshBasicMaterial color={color} transparent opacity={0.6} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
       {/* Invisible larger click target */}
       <mesh
-        position={[position[0], position[1] + 0.15, position[2]]}
+        position={[position[0], position[1] + 0.12, position[2]]}
         onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
         visible={false}
       >
-        <sphereGeometry args={[0.5, 8, 8]} />
+        <sphereGeometry args={[0.4, 8, 8]} />
         <meshBasicMaterial />
       </mesh>
     </group>
@@ -2205,12 +2190,26 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
         .map(vertex => {
           const pos = getVertexWorldPos(vertex, gameState.hexTiles);
           if (!pos) return null;
+
+          // Get color from adjacent hex resource type
+          const adjacentHex = gameState.hexTiles.find(h => vertex.hexIds.includes(h.id));
+          const resource = adjacentHex ? TERRAIN_RESOURCES[adjacentHex.terrain] : null;
+          const resourceColors: Record<string, string> = {
+            wood: '#22c55e',
+            brick: '#ef4444',
+            sheep: '#84cc16',
+            wheat: '#eab308',
+            ore: '#64748b',
+          };
+          const color = resource ? resourceColors[resource] : '#FFD700';
+
           return (
             <VertexBuildMarker
               key={`vbuild-${vertex.id}`}
               position={pos}
               vertexId={vertex.id}
               onClick={onVertexClick}
+              color={color}
             />
           );
       })}
