@@ -318,11 +318,11 @@ function ActionPanel({ gameState, onAction, rolling, rollKey = 0, onOpenTrade }:
       case 'setup-settlement':
         return (
           <div className="space-y-3">
-            <p className="text-slate-300">
-              {currentPlayer.name}: Place your settlement (Round {gameState.setupRound})
+            <p className="text-slate-300 font-semibold">
+              🏠 {currentPlayer.name}: Place your settlement (Round {gameState.setupRound})
             </p>
             <p className="text-sm text-slate-400">
-              Click on a valid intersection on the board
+              Click a <span className="text-yellow-400 font-medium">glowing gold diamond ◆</span> on any hex corner
             </p>
           </div>
         );
@@ -330,11 +330,11 @@ function ActionPanel({ gameState, onAction, rolling, rollKey = 0, onOpenTrade }:
       case 'setup-road':
         return (
           <div className="space-y-3">
-            <p className="text-slate-300">
-              {currentPlayer.name}: Place your road
+            <p className="text-slate-300 font-semibold">
+              🛤️ {currentPlayer.name}: Place your road
             </p>
             <p className="text-sm text-slate-400">
-              Click on an edge adjacent to your settlement
+              Click a <span className="text-orange-400 font-medium">glowing orange bar ━</span> next to your settlement
             </p>
           </div>
         );
@@ -1048,9 +1048,9 @@ export default function CatanGamePage() {
   const phaseHelp = (() => {
     switch (gameState.phase) {
       case 'setup-settlement':
-        return 'Setup phase: choose a highlighted intersection for your starting settlement.';
+        return '👆 Click a glowing gold diamond on any hex corner to place your starting settlement.';
       case 'setup-road':
-        return 'Setup phase: place a road connected to the settlement you just placed.';
+        return '👆 Click a glowing orange bar next to your settlement to place your starting road.';
       case 'roll':
         return 'Roll is available now. After the roll, production or robber flow resolves automatically.';
       case 'discard':
@@ -1269,20 +1269,40 @@ export default function CatanGamePage() {
           </div>
         </div>
 
-        {/* Build Mode / Free Roads floating banner */}
+        {/* Build Mode / Free Roads floating banner — large, prominent, with instructions */}
         {(buildMode || gameState.freeRoadsRemaining > 0) && (
-          <div className="flex justify-center mt-1 pointer-events-auto">
-            <div className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold ${
+          <div className="flex justify-center mt-2 pointer-events-auto">
+            <div className={`px-5 sm:px-8 py-2.5 sm:py-3 rounded-2xl text-sm sm:text-base font-bold shadow-xl animate-pulse ${
               gameState.freeRoadsRemaining > 0
-                ? 'bg-green-600/80 text-white border border-green-400/30'
-                : 'bg-yellow-600/80 text-white border border-yellow-400/30'
-            } backdrop-blur-md`}>
-              {gameState.freeRoadsRemaining > 0
-                ? `Road Building: Place ${gameState.freeRoadsRemaining} free road${gameState.freeRoadsRemaining > 1 ? 's' : ''}`
-                : `Build Mode: place a ${buildMode}`}
-              {buildMode && (
-                <button onClick={() => setBuildMode(null)} className="ml-3 underline opacity-80 hover:opacity-100">Cancel</button>
-              )}
+                ? 'bg-green-600/90 text-white border-2 border-green-300/50 shadow-green-500/30'
+                : buildMode === 'road'
+                  ? 'bg-amber-600/90 text-white border-2 border-amber-300/50 shadow-amber-500/30'
+                  : buildMode === 'city'
+                    ? 'bg-blue-600/90 text-white border-2 border-blue-300/50 shadow-blue-500/30'
+                    : 'bg-emerald-600/90 text-white border-2 border-emerald-300/50 shadow-emerald-500/30'
+            } backdrop-blur-lg`}>
+              <div className="flex items-center gap-3">
+                <span className="text-lg sm:text-xl">
+                  {gameState.freeRoadsRemaining > 0 ? '🛤️' : buildMode === 'road' ? '🛤️' : buildMode === 'city' ? '🏰' : '🏠'}
+                </span>
+                <div>
+                  <div>
+                    {gameState.freeRoadsRemaining > 0
+                      ? `Road Building: Place ${gameState.freeRoadsRemaining} free road${gameState.freeRoadsRemaining > 1 ? 's' : ''}`
+                      : `Place a ${buildMode}`}
+                  </div>
+                  <div className="text-[10px] sm:text-xs font-normal opacity-80 mt-0.5">
+                    {buildMode === 'road' || gameState.freeRoadsRemaining > 0
+                      ? '👆 Click a glowing orange bar between two corners'
+                      : buildMode === 'city'
+                        ? '👆 Click one of your existing settlements to upgrade'
+                        : '👆 Click a glowing gold diamond on any hex corner'}
+                  </div>
+                </div>
+                {buildMode && (
+                  <button onClick={() => setBuildMode(null)} className="ml-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors">✕ Cancel</button>
+                )}
+              </div>
             </div>
           </div>
         )}

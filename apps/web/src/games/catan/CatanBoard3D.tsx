@@ -1898,6 +1898,167 @@ function PlayerPresence3D({ gameState }: { gameState: GameState }) {
 }
 
 // ============================================================================
+// BUILD MARKERS — Animated pulsing indicators for buildable spots
+// ============================================================================
+
+function VertexBuildMarker({ position, vertexId, onClick }: {
+  position: [number, number, number];
+  vertexId: string;
+  onClick: (id: string) => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const [hovered, setHovered] = useState(false);
+
+  useFrame(({ clock }) => {
+    if (!groupRef.current) return;
+    const t = clock.elapsedTime * 2.5;
+    // Bobbing up-down
+    groupRef.current.position.y = position[1] + 0.35 + Math.sin(t) * 0.12;
+    // Gentle spin
+    groupRef.current.rotation.y = t * 0.6;
+    // Pulse scale
+    const pulse = 1.0 + Math.sin(t * 1.5) * 0.15;
+    groupRef.current.scale.setScalar(hovered ? pulse * 1.4 : pulse);
+  });
+
+  return (
+    <group>
+      {/* Ground ring — always visible at vertex position */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[position[0], position[1] + 0.04, position[2]]}>
+        <ringGeometry args={[0.22, 0.32, 24]} />
+        <meshStandardMaterial
+          color={hovered ? '#FFFFFF' : '#FFD700'}
+          emissive={hovered ? '#FFD700' : '#FFA000'}
+          emissiveIntensity={hovered ? 1.2 : 0.6}
+          transparent
+          opacity={0.85}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Floating diamond marker */}
+      <group ref={groupRef} position={[position[0], position[1] + 0.35, position[2]]}>
+        <mesh
+          onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
+          onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+          onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+          castShadow
+        >
+          <octahedronGeometry args={[0.18, 0]} />
+          <meshStandardMaterial
+            color={hovered ? '#FFFFFF' : '#FFD700'}
+            emissive={hovered ? '#FFE040' : '#FF8C00'}
+            emissiveIntensity={hovered ? 1.5 : 0.8}
+            roughness={0.3}
+            metalness={0.1}
+          />
+        </mesh>
+        {/* Glow light */}
+        <pointLight
+          color="#FFD700"
+          intensity={hovered ? 3.0 : 1.2}
+          distance={3}
+          decay={2}
+        />
+      </group>
+
+      {/* Large invisible click target for easier interaction */}
+      <mesh
+        position={[position[0], position[1] + 0.3, position[2]]}
+        onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+        visible={false}
+      >
+        <sphereGeometry args={[0.45, 8, 8]} />
+        <meshBasicMaterial />
+      </mesh>
+    </group>
+  );
+}
+
+function EdgeBuildMarker({ position, rotation, length, edgeId, onClick }: {
+  position: [number, number, number];
+  rotation: number;
+  length: number;
+  edgeId: string;
+  onClick: (id: string) => void;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current) return;
+    const t = clock.elapsedTime * 2.5;
+    const pulse = 1.0 + Math.sin(t * 1.5) * 0.12;
+    meshRef.current.scale.set(1, hovered ? pulse * 1.3 : pulse, hovered ? pulse * 1.3 : pulse);
+    // Gentle vertical bob
+    meshRef.current.position.y = position[1] + Math.sin(t) * 0.04;
+  });
+
+  return (
+    <group position={position} rotation={[0, -rotation, 0]}>
+      {/* Road indicator — glowing capsule along the edge */}
+      <mesh
+        ref={meshRef}
+        onClick={(e) => { e.stopPropagation(); onClick(edgeId); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+        castShadow
+      >
+        <boxGeometry args={[length * 0.85, 0.12, 0.16]} />
+        <meshStandardMaterial
+          color={hovered ? '#FFFFFF' : '#FFA500'}
+          emissive={hovered ? '#FFD700' : '#FF6600'}
+          emissiveIntensity={hovered ? 1.5 : 0.7}
+          roughness={0.4}
+          metalness={0.1}
+          transparent
+          opacity={0.9}
+        />
+      </mesh>
+
+      {/* End caps — small spheres at each end for visual clarity */}
+      <mesh position={[length * 0.40, 0, 0]}>
+        <sphereGeometry args={[0.08, 12, 12]} />
+        <meshStandardMaterial
+          color={hovered ? '#FFFFFF' : '#FFD700'}
+          emissive="#FF8C00"
+          emissiveIntensity={0.8}
+        />
+      </mesh>
+      <mesh position={[-length * 0.40, 0, 0]}>
+        <sphereGeometry args={[0.08, 12, 12]} />
+        <meshStandardMaterial
+          color={hovered ? '#FFFFFF' : '#FFD700'}
+          emissive="#FF8C00"
+          emissiveIntensity={0.8}
+        />
+      </mesh>
+
+      {/* Glow light */}
+      <pointLight
+        color="#FFA500"
+        intensity={hovered ? 2.5 : 0.8}
+        distance={2.5}
+        decay={2}
+      />
+
+      {/* Large invisible click target */}
+      <mesh
+        visible={false}
+        onClick={(e) => { e.stopPropagation(); onClick(edgeId); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      >
+        <boxGeometry args={[length * 0.92, 0.4, 0.4]} />
+        <meshBasicMaterial />
+      </mesh>
+    </group>
+  );
+}
+
+// ============================================================================
 // BOARD CONTENT — Full 3D scene
 // ============================================================================
 
@@ -2107,23 +2268,21 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
       {/* Spatial Ambience — 3D positioned ambient audio infrastructure */}
       <SpatialAmbience />
 
-      {/* Clickable vertices (when in build mode) */}
+      {/* Buildable vertex indicators — large pulsing animated markers */}
       {onVertexClick && gameState.vertices.filter(v => !v.building).map(vertex => {
         const pos = getVertexWorldPos(vertex, gameState.hexTiles);
         if (!pos) return null;
         return (
-          <mesh
-            key={`vclick-${vertex.id}`}
+          <VertexBuildMarker
+            key={`vbuild-${vertex.id}`}
             position={pos}
-            onClick={(e) => { e.stopPropagation(); onVertexClick(vertex.id); }}
-          >
-            <sphereGeometry args={[0.14, 16, 16]} />
-            <meshStandardMaterial color="#FFD700" emissive="#FFD700" emissiveIntensity={0.5} transparent opacity={0.8} />
-          </mesh>
+            vertexId={vertex.id}
+            onClick={onVertexClick}
+          />
         );
       })}
 
-      {/* Clickable edges (when in build mode) */}
+      {/* Buildable edge indicators — large pulsing animated road markers */}
       {onEdgeClick && gameState.edges.filter(e => !e.road).map(edge => {
         const v1 = gameState.vertices.find(v => v.id === edge.vertexIds[0]);
         const v2 = gameState.vertices.find(v => v.id === edge.vertexIds[1]);
@@ -2136,15 +2295,14 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
         const length = Math.sqrt((p2[0] - p1[0]) ** 2 + (p2[2] - p1[2]) ** 2);
         const angle = Math.atan2(p2[2] - p1[2], p2[0] - p1[0]);
         return (
-          <mesh
-            key={`eclick-${edge.id}`}
-            position={[midX, 0.12, midZ]}
-            rotation={[0, -angle, 0]}
-            onClick={(e) => { e.stopPropagation(); onEdgeClick(edge.id); }}
-          >
-            <boxGeometry args={[length, 0.06, 0.08]} />
-            <meshBasicMaterial color="#FFD700" transparent opacity={0.4} />
-          </mesh>
+          <EdgeBuildMarker
+            key={`ebuild-${edge.id}`}
+            position={[midX, 0.12, midZ] as [number, number, number]}
+            rotation={angle}
+            length={length}
+            edgeId={edge.id}
+            onClick={onEdgeClick}
+          />
         );
       })}
     </>
