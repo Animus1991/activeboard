@@ -236,13 +236,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.fillStyle = 'rgba(8,30,4,0.20)';
       c.beginPath(); c.ellipse(tx, ty + sz * 0.35, sz * 0.5, sz * 0.18, 0, 0, Math.PI * 2); c.fill();
     });
-    // Visible brushstrokes — gouache texture
-    _brushStrokes(c, S, '#1A5C10', 0.12, 14);
-    _brushStrokes(c, S, '#3C8A28', 0.08, 8);
-    _applyNoiseOverlay(c, S, 0.04, true);
-    _warmGlow(c, S, 0.06);
-    _paperGrain(c, S, 0.025);
-    _applyHexVignette(c, cx, cy, S, 0.28);
+    // Simplified - no fancy effects for clarity
 
   } else if (terrain === 'hills') {
     // Storybook hills — warm terracotta watercolor like Disney's Bambi autumn scenes
@@ -266,7 +260,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.fillStyle = col;
       c.beginPath(); c.ellipse(hx, hy, rw, rh, 0, Math.PI, 0); c.closePath(); c.fill();
     });
-    // Soft clay patches — watercolor blobs instead of hard rectangles
+    // Soft clay patches
     const clayPts = _scatterPoints(cx, cy, SAFE * 1.1, 10, 60, S);
     clayPts.forEach(([bx, by]) => {
       const r = 18 + Math.random() * 28;
@@ -276,13 +270,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.fillStyle = cg; c.beginPath(); c.arc(bx, by, r, 0, Math.PI * 2); c.fill();
       c.restore();
     });
-    // Hand-painted gouache strokes
-    _brushStrokes(c, S, '#A04020', 0.14, 16);
-    _brushStrokes(c, S, '#D08050', 0.08, 8);
-    _applyNoiseOverlay(c, S, 0.04, true);
-    _warmGlow(c, S, 0.08);
-    _paperGrain(c, S, 0.025);
-    _applyHexVignette(c, cx, cy, S, 0.30);
+    // Simplified - no fancy effects for clarity
 
   } else if (terrain === 'pasture') {
     // Storybook pasture — spring meadow watercolor like Disney's Fantasia pastoral scenes
@@ -330,13 +318,6 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.fillStyle = flCol;
       c.beginPath(); c.arc(fx2, fy2, 3 + Math.random() * 4, 0, Math.PI * 2); c.fill();
     });
-    // Gouache brushstrokes
-    _brushStrokes(c, S, '#4CA830', 0.10, 12);
-    _brushStrokes(c, S, '#7CC850', 0.06, 6);
-    _applyNoiseOverlay(c, S, 0.035, true);
-    _warmGlow(c, S, 0.07);
-    _paperGrain(c, S, 0.022);
-    _applyHexVignette(c, cx, cy, S, 0.22);
 
   } else if (terrain === 'fields') {
     // Storybook wheat fields — golden harvest like Disney's Brother Bear autumn palette
@@ -372,13 +353,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       }
     }
     c.restore();
-    // Warm gouache strokes
-    _brushStrokes(c, S, '#C49018', 0.10, 14);
-    _brushStrokes(c, S, '#E8C040', 0.06, 6);
-    _applyNoiseOverlay(c, S, 0.035, true);
-    _warmGlow(c, S, 0.10);
-    _paperGrain(c, S, 0.025);
-    _applyHexVignette(c, cx, cy, S, 0.25);
+    // Simplified - no fancy effects for clarity
 
   } else if (terrain === 'mountains') {
     // Storybook mountains — moody slate like Disney's Mulan/Fantasia Night on Bald Mountain
@@ -425,13 +400,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.stroke();
     }
     c.restore();
-    // Cool-toned brushstrokes
-    _brushStrokes(c, S, '#3A4E60', 0.12, 14);
-    _brushStrokes(c, S, '#6A8098', 0.07, 8);
-    _applyNoiseOverlay(c, S, 0.05, false);
-    _warmGlow(c, S, 0.03); // very subtle warmth even on cold mountains
-    _paperGrain(c, S, 0.028);
-    _applyHexVignette(c, cx, cy, S, 0.32);
+    // Simplified - no fancy effects for clarity
 
   } else if (terrain === 'desert') {
     // Storybook desert — warm amber like Disney's Aladdin/Lion King golden sands
@@ -489,13 +458,7 @@ function buildTerrainTexture(terrain: string): THREE.CanvasTexture {
       c.stroke();
     }
     c.restore();
-    // Sand-toned brushstrokes
-    _brushStrokes(c, S, '#B89030', 0.10, 14);
-    _brushStrokes(c, S, '#D8B850', 0.06, 6);
-    _applyNoiseOverlay(c, S, 0.03, true);
-    _warmGlow(c, S, 0.10);
-    _paperGrain(c, S, 0.022);
-    _applyHexVignette(c, cx, cy, S, 0.20);
+    // Simplified - no fancy effects for clarity
   }
 
   c.restore();
@@ -654,72 +617,31 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         />
       </mesh>
 
-      {/* Number token — storybook parchment disc with hand-painted numerals */}
+      {/* Number token — simplified for clarity */}
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
         return (
           <group position={[0, mat.height + 0.08, 0]}>
-            {/* Soft warm contact shadow */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]}>
-              <circleGeometry args={[0.58, 36]} />
-              <meshBasicMaterial color="#1A0C00" transparent opacity={0.22} />
-            </mesh>
-            {/* Wood rim ring — hand-carved walnut (not metallic) */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]} castShadow>
-              <cylinderGeometry args={[0.52, 0.52, 0.06, 44]} />
+            {/* Simple white background circle */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[0.45, 0.45, 0.04, 32]} />
               <meshStandardMaterial
-                color={hot ? '#6A3A10' : '#5A4018'}
-                roughness={0.92}
+                color={hot ? '#FF6B6B' : '#FFFFFF'}
+                roughness={0.8}
                 metalness={0.0}
-                emissive={hot ? '#1A0800' : '#0A0600'}
-                emissiveIntensity={0.08}
               />
             </mesh>
-            {/* Parchment disc — aged cream watercolor paper */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[0.48, 0.48, 0.055, 44]} />
-              <meshStandardMaterial
-                color={hot ? '#F8EDDA' : '#F2E8C8'}
-                roughness={0.95}
-                metalness={0.0}
-                emissive={hot ? '#1E0C04' : '#0E0A02'}
-                emissiveIntensity={hot ? 0.08 : 0.03}
-              />
-            </mesh>
-            {/* Inner decorative ring — faint ink circle like illuminated manuscript */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.028, 0]}>
-              <ringGeometry args={[0.34, 0.42, 36]} />
-              <meshStandardMaterial
-                color={hot ? '#E8D4B8' : '#E4D8B0'}
-                roughness={0.96}
-                metalness={0.0}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-            {/* Number — hand-painted ink calligraphy */}
+            {/* Number — simplified for clarity */}
             <Text
-              position={[0, 0.072, -0.04]}
+              position={[0, 0.07, 0]}
               rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={hot ? 0.46 : 0.38}
-              color={hot ? '#A01010' : '#2A1408'}
+              fontSize={0.42}
+              color={hot ? '#000000' : '#000000'}
               anchorX="center"
               anchorY="middle"
-              outlineWidth={0.018}
-              outlineColor={hot ? '#400808' : '#14080A'}
-              fontWeight={700}
+              fontWeight={900}
             >
               {String(hex.number)}
-            </Text>
-            {/* Probability pips — ink dots */}
-            <Text
-              position={[0, 0.072, 0.20]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.08}
-              color={hot ? '#A01010' : '#4A2C10'}
-              anchorX="center"
-              anchorY="middle"
-            >
-              {'●'.repeat(getProbDots(hex.number))}
             </Text>
           </group>
         );
@@ -2036,32 +1958,8 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
         shadow-normalBias={0.02}
       />
 
-      {/* FILL — warm lavender (not cold blue, storybook shadow tones) */}
-      <directionalLight position={[-12, 16, -10]} intensity={0.30} color="#C8B8D8" />
-
-      {/* RIM — warm amber back-light for that sunset silhouette */}
-      <directionalLight position={[0, 8, -22]} intensity={0.20} color="#E0C8A0" />
-
-      {/* WARM BOUNCE — gentle table reflection */}
-      <pointLight position={[0, 1.5, 0]} intensity={0.30} color="#FFD890" distance={20} decay={2} />
-
-      {/* OVERHEAD SPOT — gentle golden pool on board */}
-      <spotLight
-        position={[0, 24, 0]}
-        angle={0.45}
-        penumbra={0.7}
-        intensity={1.0}
-        color="#FFE8C8"
-        distance={40}
-        decay={1.8}
-        castShadow={false}
-      />
-
-      {/* LEFT ACCENT — very subtle warm blue (storybook cool accent) */}
-      <pointLight position={[-14, 5, 2]} intensity={0.14} color="#B0C0D8" distance={22} decay={2} />
-
-      {/* RIGHT WARM ACCENT — honey gold warmth */}
-      <pointLight position={[12, 4, -3]} intensity={0.20} color="#F0D098" distance={20} decay={2} />
+      {/* Simplified lighting for clarity - no disco ball effect */}
+      <ambientLight intensity={0.6} color="#FFFFFF" />
 
       {/* Camera */}
       <PerspectiveCamera makeDefault position={[0, 19, 4.5]} fov={38} />

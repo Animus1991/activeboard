@@ -160,29 +160,38 @@ interface PlayerPanelProps {
 
 function PlayerPanel({ player, isCurrentPlayer, isAI, currentTurn = 0, gameState }: PlayerPanelProps) {
   const vp = computeVPBreakdown(gameState, player.id);
+  const playerIndex = gameState.players.indexOf(player);
+  const turnOrder = playerIndex + 1;
   return (
     <div 
       className={`rounded-lg border-2 p-3 transition-all ${
-        isCurrentPlayer 
-          ? 'border-yellow-400 bg-slate-800/90 shadow-lg shadow-yellow-400/20' 
-          : 'border-slate-600 bg-slate-800/70'
+        isCurrentPlayer
+          ? 'border-yellow-400 bg-slate-800/90 shadow-lg shadow-yellow-400/20 scale-105'
+          : 'border-slate-600 bg-slate-800/70 opacity-80'
       }`}
     >
       <div className="flex items-center gap-3 mb-2">
+        {/* Turn order badge */}
+        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+          isCurrentPlayer ? 'bg-yellow-500 text-black' : 'bg-slate-600 text-slate-300'
+        }`}>
+          {turnOrder}
+        </div>
         <div className="relative flex-shrink-0">
           <img
             src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(player.name)}&backgroundColor=${player.color.replace('#', '')}`}
             alt={player.name}
             className="w-8 h-8 rounded-full object-cover border-2"
             style={{ borderColor: player.color }}
-            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
-          {isAI && <Bot className="w-3 h-3 text-violet-300 absolute -bottom-0.5 -right-0.5" />}
+          {isCurrentPlayer && <Crown className="absolute -top-1 -right-1 w-4 h-4 text-yellow-400" />}
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-white">{player.name}</span>
-            {isCurrentPlayer && <Crown className="w-4 h-4 text-yellow-400" />}
+            <span className={`text-sm font-semibold truncate ${isCurrentPlayer ? 'text-yellow-300' : 'text-slate-300'}`}>
+              {player.name}
+            </span>
+            {isAI && <Bot className="w-3 h-3 text-purple-400" />}
           </div>
           <div className="text-sm text-purple-400 font-bold">{vp.total} VP</div>
           {vp.total > 0 && (
