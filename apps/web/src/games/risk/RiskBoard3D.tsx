@@ -248,6 +248,73 @@ function ConnectionLines({ gameState }: { gameState: GameState }) {
 }
 
 // ============================================================================
+// CONTINENT BORDER DASHED LINES — clearly outlines each world region
+// ============================================================================
+
+function ContinentBorders({ gameState }: { gameState: GameState }) {
+  const borders = useMemo(() => {
+    return CONTINENTS.map(continent => {
+      const territories = gameState.territories.filter(t => t.continent === continent.id);
+      if (!territories.length) return null;
+
+      // Compute convex hull-like boundary from territory positions with padding
+      const pts = territories.map(t => toBoard(t.position.x, t.position.y));
+      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+      const cz = pts.reduce((s, p) => s + p[2], 0) / pts.length;
+
+      // Sort points by angle from centroid for convex hull
+      const sorted = [...pts].sort((a, b) => {
+        const angA = Math.atan2(a[2] - cz, a[0] - cx);
+        const angB = Math.atan2(b[2] - cz, b[0] - cx);
+        return angA - angB;
+      });
+
+      // Expand outward from centroid for border padding
+      const padding = 1.8;
+      const expanded = sorted.map(p => {
+        const dx = p[0] - cx;
+        const dz = p[2] - cz;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        const scale = (dist + padding) / Math.max(dist, 0.1);
+        return new THREE.Vector3(cx + dx * scale, 0.06, cz + dz * scale);
+      });
+
+      // Close the loop
+      if (expanded.length > 0) {
+        expanded.push(expanded[0].clone());
+      }
+
+      // Create smooth curve through the points
+      const curve = new THREE.CatmullRomCurve3(expanded, true, 'centripetal', 0.5);
+      const curvePoints = curve.getPoints(expanded.length * 12);
+
+      const color = CONTINENT_BG_COLORS[continent.id] || '#888888';
+      return { id: continent.id, points: curvePoints, color };
+    }).filter(Boolean);
+  }, [gameState.territories]);
+
+  return (
+    <group>
+      {borders.map(border => {
+        if (!border) return null;
+        const geo = new THREE.BufferGeometry().setFromPoints(border.points);
+        const mat = new THREE.LineDashedMaterial({
+          color: border.color,
+          transparent: true,
+          opacity: 0.7,
+          dashSize: 0.6,
+          gapSize: 0.3,
+          linewidth: 1,
+        });
+        const line = new THREE.Line(geo, mat);
+        line.computeLineDistances();
+        return <primitive key={border.id} object={line} />;
+      })}
+    </group>
+  );
+}
+
+// ============================================================================
 // CONTINENT NAME LABELS floating above the board
 // ============================================================================
 
@@ -302,7 +369,6 @@ function BoardContent({ gameState, selectedTerritory, onTerritoryClick }: BoardC
       <OrbitControls enablePan enableZoom enableRotate minDistance={10} maxDistance={50} maxPolarAngle={Math.PI / 2.3} minPolarAngle={0.1} />
 
       <color attach="background" args={['#12151C']} />
-      <fog attach="fog" args={['#12151C', 35, 60]} />
 
       {/* === WAR ROOM TABLE === */}
       <mesh position={[0, -0.15, 0]} receiveShadow>
@@ -335,6 +401,9 @@ function BoardContent({ gameState, selectedTerritory, onTerritoryClick }: BoardC
 
       {/* Connection lines between territories */}
       <ConnectionLines gameState={gameState} />
+
+      {/* Continent dashed border lines */}
+      <ContinentBorders gameState={gameState} />
 
       {/* Continent labels */}
       <ContinentLabels gameState={gameState} />

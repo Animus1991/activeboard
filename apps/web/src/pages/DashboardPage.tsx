@@ -16,7 +16,7 @@ import { rooms, games, type GameSystem } from '@/lib/api';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { user, logout, isLoading } = useAuth();
+  const { user, logout, isLoading, login } = useAuth();
   const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
   const [isJoinRoomOpen, setIsJoinRoomOpen] = useState(false);
   const [roomCode, setRoomCode] = useState('');
@@ -90,16 +90,19 @@ export default function DashboardPage() {
     }
   };
 
-  if (isLoading) {
+  // Auto-login with mock user if not authenticated (prevents redirect to login from game pages)
+  useEffect(() => {
+    if (!isLoading && !user) {
+      login('guest@tableforge.dev', 'guest').catch(() => {});
+    }
+  }, [isLoading, user, login]);
+
+  if (isLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
   }
 
   return (

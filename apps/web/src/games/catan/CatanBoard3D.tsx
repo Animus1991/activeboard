@@ -6,12 +6,11 @@
 
 import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, SMAA, Noise } from '@react-three/postprocessing';
+import { OrbitControls, Text, PerspectiveCamera, ContactShadows } from '@react-three/drei';
+import { EffectComposer, SMAA } from '@react-three/postprocessing';
 import { useKeyboardControls } from './CatanHUDFeatures';
 import { XR, createXRStore } from '@react-three/xr';
 import { Physics, RigidBody, type RapierRigidBody } from '@react-three/rapier';
-import { DepthOfField } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
 import {
@@ -2113,8 +2112,8 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
       {/* RIM — warm amber back-light for that sunset silhouette */}
       <directionalLight position={[0, 8, -22]} intensity={0.20} color="#E0C8A0" />
 
-      {/* WARM BOUNCE — stronger table reflection for storybook warmth */}
-      <pointLight position={[0, 1.5, 0]} intensity={0.70} color="#FFD890" distance={20} decay={2} />
+      {/* WARM BOUNCE — gentle table reflection */}
+      <pointLight position={[0, 1.5, 0]} intensity={0.30} color="#FFD890" distance={20} decay={2} />
 
       {/* OVERHEAD SPOT — gentle golden pool on board */}
       <spotLight
@@ -2139,11 +2138,7 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
       <OrbitControls ref={orbitRef} enablePan enableZoom enableRotate minDistance={5} maxDistance={28} maxPolarAngle={Math.PI / 2.1} minPolarAngle={0.10} />
 
       {/* Background */}
-      <color attach="background" args={['#07101E']} />
-      <fog attach="fog" args={['#07101E', 20, 38]} />
-
-      {/* HDR Environment — realistic reflections on metallic/glossy surfaces */}
-      <Environment preset="apartment" background={false} />
+      <color attach="background" args={['#0A1628']} />
 
       {/* High-res contact shadows — soft diffuse ground shadows */}
       <ContactShadows
@@ -2156,17 +2151,8 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
         color="#000000"
       />
 
-      {/* Post-processing — storybook warmth pipeline */}
+      {/* Post-processing — clean anti-aliasing only, no bloom/DoF/fog */}
       <EffectComposer multisampling={8}>
-        <Bloom
-          luminanceThreshold={0.78}
-          luminanceSmoothing={0.5}
-          intensity={0.22}
-          mipmapBlur
-        />
-        <DepthOfField focusDistance={0.015} focalLength={0.018} bokehScale={1.5} height={1080} />
-        <Vignette eskil={false} offset={0.15} darkness={0.55} />
-        <Noise premultiply opacity={0.008} />
         <SMAA />
       </EffectComposer>
 
