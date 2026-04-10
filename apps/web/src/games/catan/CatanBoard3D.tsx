@@ -1291,43 +1291,10 @@ function GlobalAnimController() {
 }
 
 function Ocean() {
-  const deepRef = useRef<THREE.Mesh>(null);
-  const foamRef = useRef<THREE.Mesh>(null);
-  const causticsRef = useRef<THREE.Mesh>(null);
-
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-
-    // Animate deep ocean colour with slow tidal breathing
-    if (deepRef.current) {
-      const mat = deepRef.current.material as THREE.MeshStandardMaterial;
-      const phase = t * 0.06;
-      mat.color.setRGB(
-        0.018 + Math.sin(phase) * 0.006,
-        0.10 + Math.sin(phase + 1.2) * 0.015,
-        0.42 + Math.sin(phase + 2.5) * 0.035,
-      );
-      mat.emissiveIntensity = 0.08 + Math.sin(phase * 1.5) * 0.025;
-    }
-
-    // Animate foam opacity like breaking waves
-    if (foamRef.current) {
-      const foamMat = foamRef.current.material as THREE.MeshStandardMaterial;
-      foamMat.opacity = 0.18 + Math.sin(t * 0.4) * 0.06 + Math.sin(t * 1.1) * 0.04;
-    }
-
-    // Subtle caustics shimmer
-    if (causticsRef.current) {
-      const causticMat = causticsRef.current.material as THREE.MeshStandardMaterial;
-      causticMat.opacity = 0.06 + Math.sin(t * 0.8 + 1.5) * 0.03;
-      causticsRef.current.rotation.z = t * 0.012;
-    }
-  });
-
   return (
     <>
-      {/* Layer 1: Deep ocean base — dark, slightly metallic, fills to table edge */}
-      <mesh ref={deepRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]} receiveShadow>
+      {/* Layer 1: Deep ocean base — static dark blue */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]} receiveShadow>
         <circleGeometry args={[14.5, 80]} />
         <meshStandardMaterial
           color="#082850"
@@ -1351,7 +1318,7 @@ function Ocean() {
         />
       </mesh>
 
-      {/* Layer 3: Shallow coastal water — turquoise-blue, lighter */}
+      {/* Layer 3: Shallow coastal water — turquoise-blue */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.019, 0]}>
         <ringGeometry args={[5.8, 7.8, 80]} />
         <meshStandardMaterial
@@ -1364,8 +1331,8 @@ function Ocean() {
         />
       </mesh>
 
-      {/* Layer 4: Foam / surf ring — animated white froth at coastline */}
-      <mesh ref={foamRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.016, 0]}>
+      {/* Layer 4: Static foam ring — no animation */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.016, 0]}>
         <ringGeometry args={[5.4, 5.9, 80]} />
         <meshStandardMaterial
           color="#C8D8E8"
@@ -1375,19 +1342,6 @@ function Ocean() {
           opacity={0.20}
           emissive="#607080"
           emissiveIntensity={0.12}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-
-      {/* Layer 5: Caustic shimmer overlay — very subtle rotating bright ring */}
-      <mesh ref={causticsRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.014, 0]}>
-        <ringGeometry args={[6.0, 9.5, 80]} />
-        <meshStandardMaterial
-          color="#A0D0F0"
-          roughness={0.05}
-          metalness={0.60}
-          transparent
-          opacity={0.06}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -1905,71 +1859,60 @@ function VertexBuildMarker({ position, vertexId, onClick }: {
   vertexId: string;
   onClick: (id: string) => void;
 }) {
-  const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
   useFrame(({ clock }) => {
-    if (!groupRef.current) return;
-    const t = clock.elapsedTime * 2.5;
-    // Bobbing up-down
-    groupRef.current.position.y = position[1] + 0.35 + Math.sin(t) * 0.12;
-    // Gentle spin
-    groupRef.current.rotation.y = t * 0.6;
-    // Pulse scale
-    const pulse = 1.0 + Math.sin(t * 1.5) * 0.15;
-    groupRef.current.scale.setScalar(hovered ? pulse * 1.4 : pulse);
+    if (!meshRef.current) return;
+    const t = clock.elapsedTime;
+    // Subtle vertical bob
+    meshRef.current.position.y = position[1] + 0.15 + Math.sin(t * 1.5) * 0.03;
+    // Subtle pulse
+    const pulse = 1.0 + Math.sin(t * 1.2) * 0.05;
+    meshRef.current.scale.setScalar(hovered ? pulse * 1.15 : pulse);
   });
 
   return (
     <group>
-      {/* Ground ring — always visible at vertex position */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[position[0], position[1] + 0.04, position[2]]}>
-        <ringGeometry args={[0.22, 0.32, 24]} />
+      {/* Subtle outline circle ring */}
+      <mesh
+        ref={meshRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[position[0], position[1] + 0.15, position[2]]}
+        onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      >
+        <ringGeometry args={[0.35, 0.42, 32]} />
         <meshStandardMaterial
           color={hovered ? '#FFFFFF' : '#FFD700'}
-          emissive={hovered ? '#FFD700' : '#FFA000'}
-          emissiveIntensity={hovered ? 1.2 : 0.6}
           transparent
-          opacity={0.85}
+          opacity={hovered ? 0.9 : 0.6}
           side={THREE.DoubleSide}
         />
       </mesh>
 
-      {/* Floating diamond marker */}
-      <group ref={groupRef} position={[position[0], position[1] + 0.35, position[2]]}>
-        <mesh
-          onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
-          onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
-          onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
-          castShadow
-        >
-          <octahedronGeometry args={[0.18, 0]} />
-          <meshStandardMaterial
-            color={hovered ? '#FFFFFF' : '#FFD700'}
-            emissive={hovered ? '#FFE040' : '#FF8C00'}
-            emissiveIntensity={hovered ? 1.0 : 0.5}
-            roughness={0.3}
-            metalness={0.1}
-          />
-        </mesh>
-        {/* Glow light — subtle, not overwhelming */}
-        <pointLight
-          color="#FFD700"
-          intensity={hovered ? 1.5 : 0.4}
-          distance={2}
-          decay={2}
-        />
-      </group>
-
-      {/* Large invisible click target for easier interaction */}
+      {/* Small dot at center */}
       <mesh
-        position={[position[0], position[1] + 0.3, position[2]]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[position[0], position[1] + 0.155, position[2]]}
+        onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
+      >
+        <circleGeometry args={[0.08, 16]} />
+        <meshBasicMaterial color={hovered ? '#FFFFFF' : '#FFD700'} />
+      </mesh>
+
+      {/* Invisible larger click target */}
+      <mesh
+        position={[position[0], position[1] + 0.15, position[2]]}
         onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
         visible={false}
       >
-        <sphereGeometry args={[0.45, 8, 8]} />
+        <sphereGeometry args={[0.5, 8, 8]} />
         <meshBasicMaterial />
       </mesh>
     </group>

@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import CatanBoard3D from './CatanBoard3D';
@@ -38,14 +38,14 @@ import {
 } from './CatanHUDFeatures';
 import { useCatanSounds } from './useCatanSounds';
 import { useCatanPersistence } from './useCatanPersistence';
-import { 
+import {
   Home, Building2, Route, ScrollText,
   Users, ArrowRight, Package,
   Crown, Sword, Map,
   ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
   BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered,
   Trophy, AlertTriangle, ArrowUpDown,
-  Move, Settings, Volume2, VolumeX
+  Move, Settings, Volume2, VolumeX, X
 } from 'lucide-react';
 import {
   type GameState,
@@ -700,6 +700,7 @@ export default function CatanGamePage() {
   const [layoutMode, setLayoutMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [selectedVertex, setSelectedVertex] = useState<string | null>(null);
 
   // ── 3D Presence bridge — WebRTC streams ↔ 3D video panels ──────────────
   const [presencePlayers, setPresencePlayers] = useState<Presence3DPlayer[]>([]);
@@ -993,6 +994,12 @@ export default function CatanGamePage() {
       return;
     }
 
+    // During main phase (build mode), show popup instead of immediately building
+    if (phase === 'main' && buildMode) {
+      setSelectedVertex(vertexId);
+      return;
+    }
+
     if (buildMode === 'settlement' && phase === 'main') {
       if (canBuildSettlement(gameState, playerId, vertexId)) {
         setGameState(prev => buildSettlement(prev, playerId, vertexId));
@@ -1116,6 +1123,89 @@ export default function CatanGamePage() {
           validEdgeIds={validEdgeIds}
         />
       </div>
+
+      {/* === VERTEX BUILD POPUP — +/- UI with build options === */}
+      <AnimatePresence>
+        {selectedVertex && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="pointer-events-auto bg-slate-900/95 border border-slate-600 rounded-2xl p-5 shadow-2xl max-w-sm w-full mx-4"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-semibold text-lg">Build Options</h3>
+                <button
+                  onClick={() => setSelectedVertex(null)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Left side: - (cancel) */}
+                <button
+                  onClick={() => setSelectedVertex(null)}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold text-2xl py-4 rounded-xl transition-all active:scale-95"
+                >
+                  −
+                </button>
+
+                {/* Right side: + (build options) */}
+                <div className="flex-1 flex flex-col gap-2">
+                  {(() => {
+                    const player = getCurrentPlayer(gameState);
+                    const canSettlement = canBuildSettlement(gameState, player.id, selectedVertex, false);
+                    const canCity = canBuildCity(gameState, player.id, selectedVertex);
+
+                    return (
+                      <>
+                        {canSettlement && (
+                          <button
+                            onClick={() => {
+                              setGameState(prev => buildSettlement(prev, player.id, selectedVertex));
+                              setSelectedVertex(null);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold py-2 px-3 rounded-lg transition-all active:scale-95 flex items-center gap-2"
+                          >
+                            <span>🏠</span>
+                            <span>Settlement</span>
+                            <span className="text-xs opacity-75">
+                              ({BUILDING_COSTS.settlement.wood || 0}🪵 {(BUILDING_COSTS.settlement.brick || 0)}🧱 {(BUILDING_COSTS.settlement.sheep || 0)}🐑 {(BUILDING_COSTS.settlement.wheat || 0)}🌾)
+                            </span>
+                          </button>
+                        )}
+                        {canCity && (
+                          <button
+                            onClick={() => {
+                              setGameState(prev => buildCity(prev, player.id, selectedVertex));
+                              setSelectedVertex(null);
+                            }}
+                            className="bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold py-2 px-3 rounded-lg transition-all active:scale-95 flex items-center gap-2"
+                          >
+                            <span>🏙</span>
+                            <span>City</span>
+                            <span className="text-xs opacity-75">
+                              ({BUILDING_COSTS.city.ore || 0}⛏️ {(BUILDING_COSTS.city.wheat || 0)}🌾 x2)
+                            </span>
+                          </button>
+                        )}
+                        {!canSettlement && !canCity && (
+                          <p className="text-slate-400 text-sm text-center py-2">
+                            Cannot build here
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* === FLOATING HEADER — safe-area aware, compact on mobile === */}
       <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none safe-top">
