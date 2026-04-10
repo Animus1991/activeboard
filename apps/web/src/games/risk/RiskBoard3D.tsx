@@ -287,9 +287,9 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
     }).filter(Boolean);
   }, [gameState.territories]);
 
-  // 2) Cross-continent dashed separator lines between territories of different continents
-  const separators = useMemo(() => {
-    const result: { id: string; from: THREE.Vector3; to: THREE.Vector3 }[] = [];
+  // 2) Dashed lines between all adjacent territories (like original Risk board)
+  const territoryBorders = useMemo(() => {
+    const result: { id: string; from: THREE.Vector3; to: THREE.Vector3; isCrossContinent: boolean }[] = [];
     const seen = new Set<string>();
     gameState.territories.forEach(t => {
       t.neighbors.forEach(nid => {
@@ -298,25 +298,55 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
         seen.add(key);
         const n = gameState.territories.find(x => x.id === nid);
         if (!n) return;
-        if (t.continent === n.continent) return; // Same continent — skip
         if (Math.abs(t.position.x - n.position.x) > 400) return; // Skip wrap-around
+
         const from = toBoard(t.position.x, t.position.y);
         const to = toBoard(n.position.x, n.position.y);
+        const isCrossContinent = t.continent !== n.continent;
 
-        // Draw a perpendicular dashed line at the midpoint to indicate the border
-        const mx = (from[0] + to[0]) / 2;
-        const mz = (from[2] + to[2]) / 2;
-        const dx = to[0] - from[0];
-        const dz = to[2] - from[2];
-        const len = Math.sqrt(dx * dx + dz * dz);
-        const perpX = -dz / len;
-        const perpZ = dx / len;
-        const halfW = 1.2; // half-width of the perpendicular separator
-        result.push({
-          id: key,
-          from: new THREE.Vector3(mx - perpX * halfW, 0.065, mz - perpZ * halfW),
-          to: new THREE.Vector3(mx + perpX * halfW, 0.065, mz + perpZ * halfW),
-        });
+        // For cross-continent borders, use perpendicular separator
+        if (isCrossContinent) {
+          const mx = (from[0] + to[0]) / 2;
+          const mz = (from[2] + to[2]) / 2;
+          const dx = to[0] - from[0];
+          const dz = to[2] - from[2];
+          const len = Math.sqrt(dx * dx + dz * dz);
+          const perpX = -dz / len;
+          const perpZ = dx / len;
+          const halfW = 1.2;
+          result.push({
+            id: key,
+            from: new THREE.Vector3(mx - perpX * halfW, 0.065, mz - perpZ * halfW),
+            to: new THREE.Vector3(mx + perpX * halfW, 0.065, mz + perpZ * halfW),
+            isCrossContinent: true,
+          });
+        } else {
+          // For same-continent borders, use direct line with gap in middle
+          const mx = (from[0] + to[0]) / 2;
+          const mz = (from[2] + to[2]) / 2;
+          const gapSize = 0.3;
+          const dx = to[0] - from[0];
+          const dz = to[2] - from[2];
+          const len = Math.sqrt(dx * dx + dz * dz);
+          const dirX = dx / len;
+          const dirZ = dz / len;
+
+          // First segment (from territory to gap)
+          result.push({
+            id: key + '-1',
+            from: new THREE.Vector3(from[0], 0.055, from[2]),
+            to: new THREE.Vector3(mx - dirX * gapSize, 0.055, mz - dirZ * gapSize),
+            isCrossContinent: false,
+          });
+
+          // Second segment (gap to neighbor)
+          result.push({
+            id: key + '-2',
+            from: new THREE.Vector3(mx + dirX * gapSize, 0.055, mz + dirZ * gapSize),
+            to: new THREE.Vector3(to[0], 0.055, to[2]),
+            isCrossContinent: false,
+          });
+        }
       });
     });
     return result;
@@ -341,15 +371,15 @@ function ContinentBorders({ gameState }: { gameState: GameState }) {
         return <primitive key={border.id} object={line} />;
       })}
 
-      {/* Cross-continent separator dashes */}
-      {separators.map(sep => {
+      {/* Territory border dashes */}
+      {territoryBorders.map(sep => {
         const geo = new THREE.BufferGeometry().setFromPoints([sep.from, sep.to]);
         const mat = new THREE.LineDashedMaterial({
-          color: '#FFFFFF',
+          color: sep.isCrossContinent ? '#FFFFFF' : '#666666',
           transparent: true,
-          opacity: 0.35,
-          dashSize: 0.25,
-          gapSize: 0.15,
+          opacity: sep.isCrossContinent ? 0.35 : 0.2,
+          dashSize: sep.isCrossContinent ? 0.25 : 0.15,
+          gapSize: sep.isCrossContinent ? 0.15 : 0.1,
           linewidth: 1,
         });
         const line = new THREE.Line(geo, mat);

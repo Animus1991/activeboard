@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { 
-  Building2, 
-  Monitor, 
-  Users, 
-  Calendar, 
-  BarChart3, 
-  Settings, 
+import {
+  Building2,
+  Monitor,
+  Users,
+  Calendar,
+  BarChart3,
+  Settings,
   Plus,
   Play,
   Pause,
@@ -17,6 +17,10 @@ import {
   TrendingUp,
   DollarSign,
   UserCheck,
+  BookOpen,
+  Save,
+  FolderOpen,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -142,8 +146,15 @@ function StatusBadge({ status }: { status: Table['status'] }) {
 
 // Table card component
 function TableCard({ table, onViewSession }: { table: Table; onViewSession: (tableId: string) => void }) {
+  const statusStyles = {
+    'available': 'border-green-500/50 shadow-lg shadow-green-500/20',
+    'in-use': 'border-blue-500/50 shadow-lg shadow-blue-500/20',
+    'reserved': 'border-yellow-500/50 shadow-lg shadow-yellow-500/20',
+    'maintenance': 'border-red-500/50 shadow-lg shadow-red-500/20',
+  };
+
   return (
-    <Card className="bg-slate-800/50 border-slate-700">
+    <Card className={`bg-slate-800/50 ${statusStyles[table.status]}`}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
@@ -168,9 +179,9 @@ function TableCard({ table, onViewSession }: { table: Table; onViewSession: (tab
               <Clock className="h-4 w-4" />
               Started at {table.startTime}
             </div>
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               className="w-full mt-2"
               onClick={() => onViewSession(table.id)}
             >
@@ -179,7 +190,7 @@ function TableCard({ table, onViewSession }: { table: Table; onViewSession: (tab
             </Button>
           </div>
         )}
-        
+
         {table.status === 'reserved' && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-slate-300">
@@ -192,7 +203,7 @@ function TableCard({ table, onViewSession }: { table: Table; onViewSession: (tab
             </div>
           </div>
         )}
-        
+
         {table.status === 'available' && (
           <div className="space-y-2">
             <p className="text-sm text-slate-400">Ready for new session</p>
@@ -202,7 +213,7 @@ function TableCard({ table, onViewSession }: { table: Table; onViewSession: (tab
             </Button>
           </div>
         )}
-        
+
         {table.status === 'maintenance' && (
           <div className="space-y-2">
             <p className="text-sm text-red-400">Under maintenance</p>
@@ -250,7 +261,7 @@ function StatsCard({ title, value, icon: Icon, trend, trendUp }: {
 function SessionRow({ session }: { session: GameSession }) {
   const localPlayers = session.players.filter(p => p.type === 'local').length;
   const remotePlayers = session.players.filter(p => p.type !== 'local').length;
-  
+
   return (
     <tr className="border-b border-slate-700">
       <td className="py-3 px-4">{session.tableName}</td>
@@ -275,6 +286,18 @@ function SessionRow({ session }: { session: GameSession }) {
       </td>
       <td className="py-3 px-4">
         <div className="flex gap-2">
+          <Button size="sm" variant="ghost" title="Save to Local Storage">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" title="Load from Local Storage">
+            <FolderOpen className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" title="Replay Session">
+            <Play className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" title="Chat">
+            <MessageSquare className="h-4 w-4" />
+          </Button>
           <Button size="sm" variant="ghost">
             <Eye className="h-4 w-4" />
           </Button>
@@ -322,6 +345,42 @@ function ReservationRow({ reservation }: { reservation: Reservation }) {
   );
 }
 
+// Game rules data
+const gameRules = [
+  {
+    id: 'catan',
+    title: 'Catan',
+    category: 'Strategy',
+    playerCount: '3-4 players',
+    time: '60-120 minutes',
+    description: 'Settlers of Catan is a resource management game where players build settlements, roads, and cities by gathering resources like wood, brick, sheep, wheat, and ore. Trade with other players and be the first to reach 10 victory points to win.',
+  },
+  {
+    id: 'ticket-to-ride',
+    title: 'Ticket to Ride',
+    category: 'Strategy',
+    playerCount: '2-5 players',
+    time: '30-60 minutes',
+    description: 'A cross-country train adventure where players collect and play matching train cards to claim railway routes connecting cities across North America. The longer the routes, the more points they earn.',
+  },
+  {
+    id: 'carcassonne',
+    title: 'Carcassonne',
+    category: 'Strategy',
+    playerCount: '2-5 players',
+    time: '30-45 minutes',
+    description: 'A tile-laying game where players build a medieval landscape with cities, roads, monasteries, and fields. Place followers (meeples) on features to score points as the landscape grows.',
+  },
+  {
+    id: 'pandemic',
+    title: 'Pandemic',
+    category: 'Cooperative',
+    playerCount: '2-4 players',
+    time: '45-60 minutes',
+    description: 'A cooperative game where players work together to stop the spread of four deadly diseases across the world. Travel between cities, treat infections, and discover cures before time runs out.',
+  },
+];
+
 // Main Dashboard Component
 export default function VenueDashboardPage() {
   const [tables] = useState<Table[]>(mockTables);
@@ -329,7 +388,14 @@ export default function VenueDashboardPage() {
   const [sessions] = useState<GameSession[]>(mockSessions);
   const [stats] = useState<VenueStats>(mockStats);
   const [_selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   void _selectedTable; // Used for future session view modal
+
+  const filteredRules = gameRules.filter(
+    (rule) =>
+      rule.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      rule.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900">
@@ -481,6 +547,10 @@ export default function VenueDashboardPage() {
               <Calendar className="h-4 w-4 mr-2" />
               Reservations
             </TabsTrigger>
+            <TabsTrigger value="rules" className="data-[state=active]:bg-purple-600">
+              <BookOpen className="h-4 w-4 mr-2" />
+              Rules Reference
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="data-[state=active]:bg-purple-600">
               <BarChart3 className="h-4 w-4 mr-2" />
               Analytics
@@ -579,6 +649,56 @@ export default function VenueDashboardPage() {
             </Card>
           </TabsContent>
 
+          {/* Rules Reference Tab */}
+          <TabsContent value="rules">
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-purple-400" />
+                  Rules Reference
+                </CardTitle>
+                <CardDescription>Quick reference for popular board games</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <Input
+                    placeholder="Search games by title or category..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredRules.map((rule) => (
+                    <Card key={rule.id} className="bg-slate-700/50 border-slate-600">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-lg">{rule.title}</CardTitle>
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            {rule.category}
+                          </span>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex items-center gap-4 text-sm text-slate-300">
+                          <span className="flex items-center gap-1">
+                            <Users className="h-4 w-4" />
+                            {rule.playerCount}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            {rule.time}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-400">{rule.description}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Analytics Tab */}
           <TabsContent value="analytics">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -599,13 +719,54 @@ export default function VenueDashboardPage() {
                         <div className="flex-1">
                           <p className="font-medium text-white">{game.name}</p>
                           <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
-                            <div 
-                              className="bg-purple-500 h-2 rounded-full" 
+                            <div
+                              className="bg-purple-500 h-2 rounded-full"
                               style={{ width: `${(game.sessions / stats.popularGames[0].sessions) * 100}%` }}
                             />
                           </div>
                         </div>
                         <span className="text-sm text-slate-400">{game.sessions} sessions</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dice Roll Distribution */}
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-purple-400" />
+                    Global Dice Roll Distribution
+                  </CardTitle>
+                  <CardDescription>Sample data for rolls 2-12</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {[
+                      { roll: 2, count: 15 },
+                      { roll: 3, count: 32 },
+                      { roll: 4, count: 48 },
+                      { roll: 5, count: 65 },
+                      { roll: 6, count: 89 },
+                      { roll: 7, count: 102 },
+                      { roll: 8, count: 87 },
+                      { roll: 9, count: 63 },
+                      { roll: 10, count: 50 },
+                      { roll: 11, count: 33 },
+                      { roll: 12, count: 16 },
+                    ].map((item) => (
+                      <div key={item.roll} className="flex items-center gap-3">
+                        <span className="text-sm text-slate-400 w-8">{item.roll}</span>
+                        <div className="flex-1">
+                          <div className="w-full bg-slate-700 rounded-full h-6">
+                            <div
+                              className="bg-purple-500 h-6 rounded-full transition-all"
+                              style={{ width: `${(item.count / 102) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-sm text-white font-medium w-12 text-right">{item.count}</span>
                       </div>
                     ))}
                   </div>
@@ -632,7 +793,7 @@ export default function VenueDashboardPage() {
                         <div className="bg-green-500 h-3 rounded-full" style={{ width: '72%' }} />
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-slate-400">Remote Players</span>
@@ -642,7 +803,7 @@ export default function VenueDashboardPage() {
                         <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${stats.remotePlayersPercent}%` }} />
                       </div>
                     </div>
-                    
+
                     <div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-slate-400">Table Utilization</span>
