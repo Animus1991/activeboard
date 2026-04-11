@@ -30,12 +30,12 @@ const xrStore = createXRStore({ hand: { teleportPointer: true } });
 
 // Storybook terrain materials — warm hand-painted matte gouache feel (Disney classics)
 const TERRAIN_MATS: Record<string, { base: string; top: string; emissive: string; height: number; roughness: number; metalness: number }> = {
-  forest:    { base: '#1E5A22', top: '#2A6E2C', emissive: '#081E08', height: 0.15, roughness: 0.96, metalness: 0.0 },
-  hills:     { base: '#A04520', top: '#C05C30', emissive: '#1C0A04', height: 0.24, roughness: 0.96, metalness: 0.0 },
-  pasture:   { base: '#48962A', top: '#5AAC38', emissive: '#0C1E06', height: 0.09, roughness: 0.97, metalness: 0.0 },
-  fields:    { base: '#C09018', top: '#D8A828', emissive: '#1E1604', height: 0.08, roughness: 0.96, metalness: 0.0 },
-  mountains: { base: '#4A5C6E', top: '#5E7286', emissive: '#0C1018', height: 0.38, roughness: 0.94, metalness: 0.0 },
-  desert:    { base: '#C09838', top: '#D8B050', emissive: '#1E1808', height: 0.06, roughness: 0.97, metalness: 0.0 },
+  forest:    { base: '#2E8B30', top: '#3CA03E', emissive: '#102E10', height: 0.12, roughness: 0.90, metalness: 0.0 },
+  hills:     { base: '#C06030', top: '#D07840', emissive: '#2A1008', height: 0.18, roughness: 0.90, metalness: 0.0 },
+  pasture:   { base: '#6BBF3A', top: '#7CD04A', emissive: '#142A08', height: 0.07, roughness: 0.92, metalness: 0.0 },
+  fields:    { base: '#E8B830', top: '#F0C840', emissive: '#2A2008', height: 0.07, roughness: 0.90, metalness: 0.0 },
+  mountains: { base: '#6A7E90', top: '#7E92A4', emissive: '#141C24', height: 0.25, roughness: 0.88, metalness: 0.0 },
+  desert:    { base: '#DDB848', top: '#E8C860', emissive: '#2A2010', height: 0.05, roughness: 0.92, metalness: 0.0 },
 };
 
 const HEX_SIZE = 1.28;
@@ -573,8 +573,8 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
           color={mat.base}
           roughness={mat.roughness}
           metalness={mat.metalness}
-          emissive={hovered ? '#2A1800' : mat.emissive}
-          emissiveIntensity={hovered ? 0.35 : 0.06}
+          emissive={hovered ? '#4A3000' : mat.emissive}
+          emissiveIntensity={hovered ? 0.5 : 0.15}
         />
       </mesh>
 
@@ -583,55 +583,77 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         <shapeGeometry args={[hexShape]} />
         <meshStandardMaterial
           map={getTerrainTexture(hex.terrain)}
-          roughness={0.92}
+          roughness={0.85}
           metalness={0.0}
           emissive={mat.emissive}
-          emissiveIntensity={0.08}
+          emissiveIntensity={0.18}
           polygonOffset
           polygonOffsetFactor={-1}
           polygonOffsetUnits={-1}
         />
       </mesh>
 
-      {/* Number token — clean white disc with camera-facing number */}
+      {/* 3D Terrain props — trees, mountains, rocks etc. */}
+      {TERRAIN_PROPS[hex.terrain] && (
+        <group position={[0, mat.height + 0.01, 0]}>
+          {(() => { const Comp = TERRAIN_PROPS[hex.terrain]; return <Comp />; })()}
+        </group>
+      )}
+
+      {/* Number token — large cream/white disc flat on hex with number printed on surface */}
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
+        const probDots = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 }[hex.number] || 0;
         return (
-          <group position={[0, mat.height + 0.08, 0]}>
-            {/* White/red background disc lying flat on hex */}
+          <group position={[0, mat.height + 0.02, 0]}>
+            {/* Shadow disc underneath */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]}>
+              <circleGeometry args={[0.48, 32]} />
+              <meshBasicMaterial color="#000000" transparent opacity={0.18} />
+            </mesh>
+            {/* White/cream disc — flat cylinder on hex surface */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[0.38, 0.38, 0.03, 32]} />
+              <cylinderGeometry args={[0.44, 0.44, 0.05, 32]} />
               <meshStandardMaterial
-                color={hot ? '#E8E0D0' : '#F5F0E8'}
-                roughness={0.85}
+                color={hot ? '#FFF5E0' : '#FEFCF5'}
+                roughness={0.75}
                 metalness={0.0}
+                emissive={hot ? '#3A1000' : '#181510'}
+                emissiveIntensity={0.06}
               />
             </mesh>
-            {/* Number — always faces camera using Billboard */}
-            <Billboard position={[0, 0.25, 0]}>
-              <Text
-                fontSize={0.32}
-                color={hot ? '#CC0000' : '#1A1A1A'}
-                anchorX="center"
-                anchorY="middle"
-                fontWeight={hot ? 900 : 700}
-              >
-                {String(hex.number)}
-              </Text>
-            </Billboard>
-            {/* Probability dots under number */}
-            {hot && (
-              <Billboard position={[0, 0.10, 0]}>
-                <Text
-                  fontSize={0.10}
-                  color="#CC0000"
-                  anchorX="center"
-                  anchorY="middle"
-                >
-                  {'•••••'}
-                </Text>
-              </Billboard>
-            )}
+            {/* Thin border ring */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, 0]}>
+              <ringGeometry args={[0.40, 0.44, 32]} />
+              <meshStandardMaterial
+                color={hot ? '#C04040' : '#8A7A60'}
+                roughness={0.6}
+                metalness={0.1}
+              />
+            </mesh>
+            {/* Number text — flat on disc surface */}
+            <Text
+              position={[0, 0.032, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.38}
+              color={hot ? '#CC0000' : '#1A1A1A'}
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={hot ? 900 : 700}
+            >
+              {String(hex.number)}
+            </Text>
+            {/* Probability dots below number */}
+            <Text
+              position={[0, 0.032, 0.22]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.08}
+              color={hot ? '#CC0000' : '#555555'}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {'•'.repeat(probDots)}
+            </Text>
           </group>
         );
       })()}
@@ -896,7 +918,7 @@ function DesertProps() {
   );
 }
 
-const _TERRAIN_PROPS: Record<string, React.FC> = {
+const TERRAIN_PROPS: Record<string, React.FC> = {
   forest: ForestProps,
   mountains: MountainProps,
   hills: HillsProps,
@@ -1184,15 +1206,15 @@ function GlobalAnimController() {
 function Ocean() {
   return (
     <>
-      {/* Layer 1: Deep ocean base — static dark blue */}
+      {/* Layer 1: Deep ocean base */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.025, 0]} receiveShadow>
         <circleGeometry args={[14.5, 80]} />
         <meshStandardMaterial
-          color="#082850"
-          roughness={0.08}
-          metalness={0.28}
-          emissive="#041430"
-          emissiveIntensity={0.08}
+          color="#1A4878"
+          roughness={0.12}
+          metalness={0.20}
+          emissive="#0A2848"
+          emissiveIntensity={0.15}
         />
       </mesh>
 
@@ -1200,11 +1222,11 @@ function Ocean() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.022, 0]}>
         <ringGeometry args={[7.5, 14.5, 80]} />
         <meshStandardMaterial
-          color="#0C3A6E"
-          roughness={0.10}
-          metalness={0.25}
+          color="#1E5888"
+          roughness={0.14}
+          metalness={0.18}
           transparent
-          opacity={0.70}
+          opacity={0.75}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -1213,11 +1235,11 @@ function Ocean() {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.019, 0]}>
         <ringGeometry args={[5.8, 7.8, 80]} />
         <meshStandardMaterial
-          color="#1A6898"
-          roughness={0.14}
-          metalness={0.18}
+          color="#2888B0"
+          roughness={0.18}
+          metalness={0.12}
           transparent
-          opacity={0.55}
+          opacity={0.65}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -1267,9 +1289,9 @@ function SeaFrame() {
         const [wx, , wz] = hexToWorld(pos.q, pos.r);
         // Vary colour slightly per tile for organic look
         const hueShift = (i * 7) % 18;
-        const r = 0.035 + hueShift * 0.001;
-        const g = 0.16 + hueShift * 0.003;
-        const b = 0.42 + hueShift * 0.005;
+        const r = 0.10 + hueShift * 0.002;
+        const g = 0.32 + hueShift * 0.004;
+        const b = 0.55 + hueShift * 0.006;
         return (
           <group key={i} position={[wx, -0.010, wz]}>
             {/* Gold trim border beneath sea tile */}
@@ -1327,20 +1349,23 @@ function Harbors() {
               <meshStandardMaterial color={color} roughness={0.55} metalness={0.08} emissive={color} emissiveIntensity={0.12} />
             </mesh>
 
-            {/* Label — larger, bolder typography */}
-            <Text
-              position={[0, 0.08, 0]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.16}
-              color="#FFFFFF"
-              anchorX="center"
-              anchorY="middle"
-              outlineWidth={0.028}
-              outlineColor="#000000"
-              fontWeight={700}
-            >
-              {harbor.label}
-            </Text>
+            {/* Label — billboard so it always faces camera */}
+            <Billboard position={[0, 0.45, 0]}>
+              <Text
+                fontSize={0.24}
+                color="#FFFFFF"
+                anchorX="center"
+                anchorY="middle"
+                outlineWidth={0.04}
+                outlineColor="#000000"
+                fontWeight={700}
+                maxWidth={1.5}
+                textAlign="center"
+                lineHeight={1.2}
+              >
+                {harbor.label}
+              </Text>
+            </Billboard>
 
             {/* Wooden pier/dock extending toward island */}
             <mesh
@@ -1766,29 +1791,27 @@ function VertexBuildMarker({ position, vertexId, onClick, color }: {
 
   return (
     <group>
-      {/* Small dot colored by resource type */}
+      {/* Diamond indicator — bright, visible, pulsing */}
       <mesh
         ref={dotRef}
-        rotation={[-Math.PI / 2, 0, 0]}
+        rotation={[-Math.PI / 2, 0, Math.PI / 4]}
         position={[position[0], position[1] + 0.12, position[2]]}
         onClick={(e) => { e.stopPropagation(); onClick(vertexId); }}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'auto'; }}
       >
-        <circleGeometry args={[0.04, 16]} />
-        <meshBasicMaterial color={color} />
+        <circleGeometry args={[0.14, 4]} />
+        <meshBasicMaterial color={hovered ? '#FFFFFF' : color} />
       </mesh>
 
-      {/* Smaller outline on hover - half size */}
-      {hovered && (
-        <mesh
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[position[0], position[1] + 0.12, position[2]]}
-        >
-          <ringGeometry args={[0.06, 0.08, 32]} />
-          <meshBasicMaterial color={color} transparent opacity={0.8} side={THREE.DoubleSide} />
-        </mesh>
-      )}
+      {/* Glow ring around diamond */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, Math.PI / 4]}
+        position={[position[0], position[1] + 0.11, position[2]]}
+      >
+        <ringGeometry args={[0.14, 0.22, 4]} />
+        <meshBasicMaterial color={color} transparent opacity={hovered ? 0.9 : 0.5} side={THREE.DoubleSide} />
+      </mesh>
 
       {/* Invisible larger click target */}
       <mesh
@@ -1917,14 +1940,14 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
           CINEMATIC LIGHTING RIG — warm museum-gallery tabletop feel
           7 light sources for depth, drama, and realistic PBR response
           ══════════════════════════════════════════════════════════════════ */}
-      {/* Ambient: warm golden, like candlelight in a storybook cottage */}
-      <ambientLight intensity={0.35} color="#F8E8D0" />
+      {/* Ambient: warm golden fill so nothing is black */}
+      <ambientLight intensity={0.7} color="#FFF5E8" />
 
-      {/* KEY — soft warm golden overhead (Disney golden-hour, not harsh) */}
+      {/* KEY — bright warm overhead sun */}
       <directionalLight
         position={[6, 28, 5]}
-        intensity={1.5}
-        color="#FFE8C0"
+        intensity={2.2}
+        color="#FFF0D0"
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
@@ -1937,15 +1960,18 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
         shadow-normalBias={0.02}
       />
 
-      {/* Simplified lighting for clarity - no disco ball effect */}
-      <ambientLight intensity={0.6} color="#FFFFFF" />
+      {/* FILL — cool blue from opposite side to balance warm key */}
+      <directionalLight position={[-8, 16, -6]} intensity={0.8} color="#C0D8FF" />
+
+      {/* RIM — subtle backlight for edge definition */}
+      <directionalLight position={[0, 10, -14]} intensity={0.5} color="#FFE0B0" />
 
       {/* Camera */}
       <PerspectiveCamera makeDefault position={[0, 19, 4.5]} fov={38} />
       <OrbitControls ref={orbitRef} enablePan enableZoom enableRotate minDistance={5} maxDistance={28} maxPolarAngle={Math.PI / 2.1} minPolarAngle={0.10} />
 
-      {/* Background */}
-      <color attach="background" args={['#0A1628']} />
+      {/* Background — warm dark brown like a wooden game table room */}
+      <color attach="background" args={['#1A1008']} />
 
       {/* High-res contact shadows — soft diffuse ground shadows */}
       <ContactShadows
@@ -1964,32 +1990,32 @@ function BoardContent({ gameState, presencePlayers, resourceAnimations, onHexCli
       </EffectComposer>
 
       {/* ══ WALNUT TABLE SURFACE ══ */}
-      {/* Main table body — dark walnut with subtle sheen */}
+      {/* Main table body — warm walnut */}
       <mesh position={[0, -0.28, 0]} receiveShadow>
         <cylinderGeometry args={[17, 17.2, 0.50, 80]} />
         <meshStandardMaterial
-          color="#1A0D06"
+          color="#3A2210"
           roughness={0.72}
-          metalness={0.08}
+          metalness={0.06}
           roughnessMap={getProceduralTexture('wood')}
           bumpMap={getProceduralTexture('wood')}
           bumpScale={0.005}
-          emissive="#0A0400"
-          emissiveIntensity={0.12}
+          emissive="#140A04"
+          emissiveIntensity={0.15}
         />
       </mesh>
-      {/* Table top surface — slightly lighter walnut veneer */}
+      {/* Table top surface — lighter walnut veneer */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.029, 0]} receiveShadow>
         <circleGeometry args={[17, 80]} />
         <meshStandardMaterial
-          color="#22140A"
+          color="#4A2C14"
           roughness={0.68}
-          metalness={0.10}
+          metalness={0.08}
           roughnessMap={getProceduralTexture('wood')}
           bumpMap={getProceduralTexture('wood')}
           bumpScale={0.003}
-          emissive="#080400"
-          emissiveIntensity={0.10}
+          emissive="#1A0C04"
+          emissiveIntensity={0.12}
         />
       </mesh>
       {/* Felt inlay ring — dark green gaming felt under the board */}
@@ -2145,7 +2171,7 @@ export default function CatanBoard3D({
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.25,
+          toneMappingExposure: 1.6,
           outputColorSpace: THREE.SRGBColorSpace,
           powerPreference: 'high-performance',
           precision: 'highp',
