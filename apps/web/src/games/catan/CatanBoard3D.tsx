@@ -270,7 +270,7 @@ function ForestProps() {
       return {
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
-        scale: (0.5 + Math.random() * 0.4) * 3,
+        scale: (0.5 + Math.random() * 0.4) * 2.7,
         rotation: Math.random() * Math.PI,
       };
     }),
@@ -312,7 +312,7 @@ function MountainProps() {
       arr.push({
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
-        s: (0.12 + Math.random() * 0.06) * 3,
+        s: (0.12 + Math.random() * 0.06) * 2.7,
         rot: [Math.random(), Math.random(), Math.random()] as [number, number, number]
       });
     }
@@ -370,7 +370,7 @@ function HillsProps() {
 
 function FieldsProps() {
   const stalks = useMemo(() =>
-    Array.from({ length: 60 }).map(() => {
+    Array.from({ length: 240 }).map(() => {
       const angle = Math.random() * Math.PI * 2;
       const radius = 0.60 + Math.random() * 0.40;
       return {
@@ -412,7 +412,7 @@ function PastureProps() {
   return (
     <group>
       {sheep.map((s, i) => (
-        <group key={`sh${i}`} position={[s.x, 0, s.z]} rotation={[0, s.rot, 0]} scale={1.4 * 3}>
+        <group key={`sh${i}`} position={[s.x, 0, s.z]} rotation={[0, s.rot, 0]} scale={1.4 * 2.7}>
           {/* Body */}
           <mesh rotation={[0, 0, Math.PI / 2]} position={[0, 0.04, 0]} castShadow>
             <capsuleGeometry args={[0.035, 0.05, 8, 8]} />
