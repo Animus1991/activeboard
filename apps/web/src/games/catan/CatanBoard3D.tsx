@@ -353,40 +353,33 @@ function ForestProps() {
 
 function MountainProps() {
   const peaks = useMemo(() => [
-    { x: 0.3, z: -0.2, sx: 0.7, sy: 1.0, sz: 0.7, rot: 0.2 },
-    { x: -0.35, z: 0.25, sx: 0.5, sy: 0.7, sz: 0.5, rot: 0.8 },
-    { x: 0.0, z: 0.4, sx: 0.4, sy: 0.5, sz: 0.4, rot: 1.2 },
-    { x: -0.1, z: -0.45, sx: 0.35, sy: 0.45, sz: 0.35, rot: 0.5 },
+    { x: 0.25, z: -0.2, s: 0.25, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: -0.3, z: 0.25, s: 0.22, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: 0.0, z: 0.35, s: 0.20, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: -0.1, z: -0.35, s: 0.18, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: 0.3, z: 0.25, s: 0.15, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    // Some extra small rocks around the base
+    { x: -0.4, z: -0.1, s: 0.10, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: 0.1, z: -0.5, s: 0.08, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
+    { x: 0.4, z: 0.0, s: 0.12, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
   ], []);
-  const rocks = useMemo(() =>
-    Array.from({ length: 8 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.4,
-      z: (Math.random() - 0.5) * 1.4,
-      s: 0.03 + Math.random() * 0.04,
-      r: [Math.random(), Math.random(), Math.random()] as [number, number, number],
-    })).filter(r => r.x * r.x + r.z * r.z > 0.20),
-  []);
   return (
     <group>
       {peaks.map((p, i) => (
-        <group key={i} position={[p.x, 0, p.z]} scale={[p.sx, p.sy, p.sz]} rotation={[0, p.rot, 0]}>
-          {/* Smooth mountain body — warm slate, painted feel */}
-          <mesh castShadow position={[0, 0.30, 0]}>
-            <coneGeometry args={[0.50, 0.65, 16]} />
-            <meshStandardMaterial color="#586878" roughness={0.96} metalness={0.0} />
+        <group key={i} position={[p.x, p.s * 0.7, p.z]}>
+          {/* Main mountain rock - low poly sphere */}
+          <mesh scale={p.s} rotation={p.rot} castShadow receiveShadow>
+            <icosahedronGeometry args={[1, 0]} />
+            <meshStandardMaterial color="#586878" roughness={0.9} flatShading />
           </mesh>
-          {/* Snow cap — soft luminous cream */}
-          <mesh position={[0, 0.52, 0]} scale={[1.0, 0.30, 1.0]}>
-            <coneGeometry args={[0.50, 0.65, 16]} />
-            <meshStandardMaterial color="#F0EEF4" roughness={0.92} emissive="#E8E4F0" emissiveIntensity={0.06} />
-          </mesh>
+          {/* Snow cap - slightly smaller icosphere offset upwards */}
+          {p.s > 0.12 && (
+            <mesh position={[0, p.s * 0.65, 0]} scale={p.s * 0.65} rotation={p.rot}>
+              <icosahedronGeometry args={[1, 0]} />
+              <meshStandardMaterial color="#FFFFFF" roughness={0.9} flatShading emissive="#DDDDDD" emissiveIntensity={0.2} />
+            </mesh>
+          )}
         </group>
-      ))}
-      {rocks.map((r, i) => (
-        <mesh key={`r${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={r.r} castShadow>
-          <dodecahedronGeometry />
-          <meshStandardMaterial color="#3A404A" roughness={0.96} metalness={0.0} />
-        </mesh>
       ))}
     </group>
   );
@@ -430,26 +423,25 @@ function HillsProps() {
 
 function FieldsProps() {
   const stalks = useMemo(() =>
-    Array.from({ length: 40 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.5,
-      z: (Math.random() - 0.5) * 1.5,
-      rot: Math.random() * Math.PI,
-      scale: 0.5 + Math.random() * 0.5,
-      col: Math.random() > 0.3 ? '#E0B830' : '#C89820',
-    })).filter(s => s.x * s.x + s.z * s.z > 0.22),
+    Array.from({ length: 120 }).map(() => {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.32 + Math.random() * 0.45; // Avoid center token
+      return {
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        rotX: (Math.random() - 0.5) * 0.3,
+        rotZ: (Math.random() - 0.5) * 0.3,
+        scaleY: 0.6 + Math.random() * 0.6,
+        col: Math.random() > 0.4 ? '#E8B830' : '#F0C840',
+      };
+    }),
   []);
   return (
     <group>
       {stalks.map((s, i) => (
-        <mesh key={i} position={[s.x, 0.08, s.z]} rotation={[0, s.rot, 0]} scale={s.scale} castShadow>
-          <boxGeometry args={[0.012, 0.16, 0.012]} />
-          <meshStandardMaterial color={s.col} roughness={0.96} />
-        </mesh>
-      ))}
-      {[-0.4, -0.15, 0.10, 0.35].map((x, i) => (
-        <mesh key={`f${i}`} position={[x, 0.005, 0]} receiveShadow>
-          <boxGeometry args={[0.04, 0.01, 1.2]} />
-          <meshStandardMaterial color="#4A2C14" roughness={0.97} />
+        <mesh key={i} position={[s.x, 0.08 * s.scaleY, s.z]} rotation={[s.rotX, 0, s.rotZ]} castShadow>
+          <cylinderGeometry args={[0.005, 0.008, 0.16 * s.scaleY, 4]} />
+          <meshStandardMaterial color={s.col} roughness={0.9} flatShading />
         </mesh>
       ))}
     </group>
@@ -458,46 +450,48 @@ function FieldsProps() {
 
 function PastureProps() {
   const grassClumps = useMemo(() =>
-    Array.from({ length: 30 }).map(() => ({
+    Array.from({ length: 20 }).map(() => ({
       x: (Math.random() - 0.5) * 1.4,
       z: (Math.random() - 0.5) * 1.4,
-      s: 0.04 + Math.random() * 0.08,
+      s: 0.03 + Math.random() * 0.06,
     })).filter(g => g.x * g.x + g.z * g.z > 0.20),
   []);
-  const flowers = useMemo(() =>
-    Array.from({ length: 16 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.3,
-      z: (Math.random() - 0.5) * 1.3,
-      col: ['#FFF8E0', '#FFD840', '#FF7098', '#A060D0'][Math.floor(Math.random() * 4)],
-    })).filter(f => f.x * f.x + f.z * f.z > 0.20),
-  []);
   const sheep = useMemo(() => [
-    { x: 0.5, z: 0.3 }, { x: -0.4, z: -0.5 }, { x: 0.2, z: -0.6 },
+    { x: 0.45, z: 0.3, rot: Math.random() * Math.PI * 2 }, 
+    { x: -0.4, z: -0.4, rot: Math.random() * Math.PI * 2 }, 
+    { x: 0.1, z: -0.55, rot: Math.random() * Math.PI * 2 },
+    { x: -0.45, z: 0.25, rot: Math.random() * Math.PI * 2 },
+    { x: 0.2, z: 0.45, rot: Math.random() * Math.PI * 2 },
   ], []);
   return (
     <group>
       {grassClumps.map((g, i) => (
-        <mesh key={i} position={[g.x, g.s * 0.3, g.z]} scale={g.s}>
-          <sphereGeometry args={[1, 16, 16]} />
-          <meshStandardMaterial color="#5CB838" roughness={0.97} />
-        </mesh>
-      ))}
-      {flowers.map((f, i) => (
-        <mesh key={`fl${i}`} position={[f.x, 0.04, f.z]}>
-          <sphereGeometry args={[0.018, 10, 10]} />
-          <meshStandardMaterial color={f.col} roughness={0.96} emissive={f.col} emissiveIntensity={0.08} />
+        <mesh key={`g${i}`} position={[g.x, g.s * 0.3, g.z]} scale={g.s}>
+          <sphereGeometry args={[1, 8, 8]} />
+          <meshStandardMaterial color="#5CB838" roughness={0.97} flatShading />
         </mesh>
       ))}
       {sheep.map((s, i) => (
-        <group key={`sh${i}`} position={[s.x, 0.055, s.z]} scale={0.06}>
-          <mesh castShadow>
-            <sphereGeometry args={[1, 16, 16]} />
-            <meshStandardMaterial color="#F8F4E8" roughness={0.97} />
+        <group key={`sh${i}`} position={[s.x, 0.04, s.z]} rotation={[0, s.rot, 0]} scale={1.4}>
+          {/* Body */}
+          <mesh rotation={[0, 0, Math.PI / 2]} position={[0, 0.04, 0]} castShadow>
+            <capsuleGeometry args={[0.035, 0.05, 8, 8]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.97} flatShading />
           </mesh>
-          <mesh position={[0.9, 0.4, 0]} scale={0.35}>
-            <sphereGeometry args={[1, 12, 12]} />
-            <meshStandardMaterial color="#2A1A10" roughness={0.96} />
+          {/* Head */}
+          <mesh position={[0.05, 0.06, 0]} castShadow>
+            <sphereGeometry args={[0.025, 8, 8]} />
+            <meshStandardMaterial color="#1A1A1A" roughness={0.9} flatShading />
           </mesh>
+          {/* Legs */}
+          {[-0.02, 0.02].map((lx, li) => 
+            [-0.015, 0.015].map((lz, lji) => (
+              <mesh key={`l${li}${lji}`} position={[lx, 0.02, lz]} castShadow>
+                <cylinderGeometry args={[0.005, 0.005, 0.04, 4]} />
+                <meshStandardMaterial color="#1A1A1A" roughness={0.9} />
+              </mesh>
+            ))
+          )}
         </group>
       ))}
     </group>
