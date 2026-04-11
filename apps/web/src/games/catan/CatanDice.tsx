@@ -43,9 +43,11 @@ interface CatanDiceProps {
   values: [number, number];
   /** Pass a roll-count integer; increment it to retrigger the animation */
   rollKey?: number;
+  /** Show numeric total badge next to dice (default: false — pips only) */
+  showTotal?: boolean;
 }
 
-export default function CatanDice({ values, rollKey = 0 }: CatanDiceProps) {
+export default function CatanDice({ values, rollKey = 0, showTotal = false }: CatanDiceProps) {
   const isHighRoll = values[0] + values[1] === 7;
 
   return (
@@ -78,21 +80,23 @@ export default function CatanDice({ values, rollKey = 0 }: CatanDiceProps) {
         </motion.div>
       ))}
 
-      {/* Total badge */}
-      <motion.div
-        key={`total-${rollKey}`}
-        initial={{ scale: 0, opacity: 0, textShadow: '0px 0px 0px rgba(0,0,0,0)' }}
-        animate={{ 
-          scale: 1, 
-          opacity: 1,
-          textShadow: isHighRoll ? '0px 0px 10px rgba(251,146,60,0.8)' : '0px 0px 8px rgba(255,255,255,0.3)'
-        }}
-        transition={{ delay: 0.3, duration: 0.8, type: 'spring', stiffness: 300 }}
-        className={`text-3xl font-black tabular-nums min-w-[2rem] text-center
-          ${isHighRoll ? 'text-orange-500' : 'text-slate-100'}`}
-      >
-        {values[0] + values[1]}
-      </motion.div>
+      {/* Total badge — only shown when showTotal is true (stats panel) */}
+      {showTotal && (
+        <motion.div
+          key={`total-${rollKey}`}
+          initial={{ scale: 0, opacity: 0, textShadow: '0px 0px 0px rgba(0,0,0,0)' }}
+          animate={{ 
+            scale: 1, 
+            opacity: 1,
+            textShadow: isHighRoll ? '0px 0px 10px rgba(251,146,60,0.8)' : '0px 0px 8px rgba(255,255,255,0.3)'
+          }}
+          transition={{ delay: 0.3, duration: 0.8, type: 'spring', stiffness: 300 }}
+          className={`text-3xl font-black tabular-nums min-w-[2rem] text-center
+            ${isHighRoll ? 'text-orange-500' : 'text-slate-100'}`}
+        >
+          {values[0] + values[1]}
+        </motion.div>
+      )}
     </div>
   );
 }

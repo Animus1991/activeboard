@@ -4,12 +4,14 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import CatanBoard3D from './CatanBoard3D';
 const CatanTradePanel = lazy(() => import('./CatanTradePanel'));
+const CatanCarouselHUD = lazy(() => import('./CatanCarouselHUD'));
 import { Resource3DIcon } from './CatanResourceFlow';
+import CatanResourceFeedback, { type ResourceFeedbackEntry } from './CatanResourceFeedback';
 
 type CameraMode = 'tactical' | 'table' | 'inspect' | 'cinematic';
 import CatanPresence, { type PresencePeerInfo } from './CatanPresence';
@@ -45,7 +47,7 @@ import {
   ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
   BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered,
   Trophy, AlertTriangle, ArrowUpDown,
-  Move, Settings, Volume2, VolumeX, X
+  Move, Settings, Volume2, VolumeX
 } from 'lucide-react';
 import {
   type GameState,
@@ -599,7 +601,7 @@ function ActionPanel({ gameState, onAction, rolling, rollKey = 0, onOpenTrade }:
       {/* Dice display */}
       {gameState.diceRoll && (
         <div className="mt-4 pt-4 border-t border-slate-700 flex justify-center">
-          <CatanDice values={gameState.diceRoll} rollKey={rollKey} />
+          <CatanDice values={gameState.diceRoll} rollKey={rollKey} showTotal />
         </div>
       )}
     </div>
@@ -611,7 +613,7 @@ interface ResourcePanelProps {
   gameState: GameState;
 }
 
-function ResourcePanel({ player, gameState }: ResourcePanelProps) {
+function _ResourcePanel({ player, gameState }: ResourcePanelProps) {
   const summary = computeResourceSummary(gameState, player.id);
   const rateColor = (r: number) =>
     r === 2 ? 'text-green-400' : r === 3 ? 'text-yellow-400' : 'text-slate-600';
@@ -711,7 +713,8 @@ export default function CatanGamePage() {
   const [layoutMode, setLayoutMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
-  const [selectedVertex, setSelectedVertex] = useState<string | null>(null);
+  // Bank trade moved to carousel HUD (no vertex popup needed)
+  const [resourceFeedback, setResourceFeedback] = useState<ResourceFeedbackEntry[]>([]);
 
   // ── 3D Presence bridge — WebRTC streams ↔ 3D video panels ──────────────
   const [presencePlayers, setPresencePlayers] = useState<Presence3DPlayer[]>([]);
@@ -904,6 +907,16 @@ export default function CatanGamePage() {
                     amount: entry.amount,
                     timestamp: Date.now(),
                   }]);
+                  // Also push to floating resource feedback toasts
+                  const prodPlayer = next.players.find(p => p.name === entry.playerName);
+                  setResourceFeedback(f => [...f, {
+                    id: `rf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    playerName: entry.playerName,
+                    playerColor: prodPlayer?.color ?? '#fff',
+                    resource: entry.resource,
+                    amount: entry.amount,
+                    timestamp: Date.now(),
+                  }]);
                 }
               }
             }
@@ -1021,26 +1034,45 @@ export default function CatanGamePage() {
   const handleVertexClick = useCallback((vertexId: string) => {
     const phase = gameState.phase;
     const playerId = getCurrentPlayer(gameState).id;
+    const player = getCurrentPlayer(gameState);
 
     if (phase === 'setup-settlement') {
       setGameState(prev => {
         const next = buildSettlement(prev, playerId, vertexId);
-        if (next !== prev) return advanceSetup(next);
-        return prev;
+        if (next === prev) return prev;
+
+        // Show resource feedback for 2nd settlement (setup round 2)
+        if (prev.setupRound === 2) {
+          const vertex = next.vertices.find(v => v.id === vertexId);
+          if (vertex) {
+            const adjacentHexes = next.hexTiles.filter(h => vertex.hexIds.includes(h.id));
+            for (const hex of adjacentHexes) {
+              const terrain = hex.terrain;
+              const resMap: Record<string, ResourceType> = {
+                forest: 'wood', hills: 'brick', pasture: 'sheep', fields: 'wheat', mountains: 'ore',
+              };
+              const res = resMap[terrain];
+              if (res) {
+                setResourceFeedback(f => [...f, {
+                  id: `rf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  playerName: player.name,
+                  playerColor: player.color,
+                  resource: res,
+                  amount: 1,
+                  timestamp: Date.now(),
+                }]);
+              }
+            }
+          }
+        }
+
+        return advanceSetup(next);
       });
       return;
     }
 
-    // During main phase (build mode), show popup instead of immediately building
-    if (phase === 'main' && buildMode) {
-      setSelectedVertex(vertexId);
-      return;
-    }
-
-    // Always show bank management popup when clicking a vertex
-    setSelectedVertex(vertexId);
-
-    if (buildMode === 'settlement' && phase === 'main') {
+    // During main phase build mode — build immediately
+    if (phase === 'main' && buildMode === 'settlement') {
       if (canBuildSettlement(gameState, playerId, vertexId)) {
         setGameState(prev => buildSettlement(prev, playerId, vertexId));
         setBuildMode(null);
@@ -1048,7 +1080,7 @@ export default function CatanGamePage() {
       return;
     }
 
-    if (buildMode === 'city' && phase === 'main') {
+    if (phase === 'main' && buildMode === 'city') {
       if (canBuildCity(gameState, playerId, vertexId)) {
         setGameState(prev => buildCity(prev, playerId, vertexId));
         setBuildMode(null);
@@ -1120,7 +1152,7 @@ export default function CatanGamePage() {
       .map(e => e.id);
   }, [showEdgeTargets, gameState, currentPlayer.id]);
   const uiProjection = computeUIProjection(gameState, currentPlayer.id);
-  const diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
+  const _diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
   const phaseHelp = (() => {
     switch (gameState.phase) {
       case 'setup-settlement':
@@ -1200,98 +1232,6 @@ export default function CatanGamePage() {
           validEdgeIds={validEdgeIds}
         />
       </div>
-
-      {/* === VERTEX POPUP — Bank resource management with -/+ === */}
-      <AnimatePresence>
-        {selectedVertex && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm pointer-events-none">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="pointer-events-auto bg-slate-900/95 border border-slate-600 rounded-2xl p-5 shadow-2xl max-w-md w-full mx-4"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-semibold text-lg">Bank Resource Management</h3>
-                <button
-                  onClick={() => setSelectedVertex(null)}
-                  className="text-slate-400 hover:text-white transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {(['wood', 'brick', 'sheep', 'wheat', 'ore'] as ResourceType[]).map(resource => {
-                  const player = getCurrentPlayer(gameState);
-                  const count = player.resources[resource];
-                  const emoji = ResourceEmoji[resource];
-
-                  return (
-                    <div key={resource} className="flex items-center gap-3 bg-slate-800/50 p-3 rounded-lg">
-                      <span className="text-2xl">{emoji}</span>
-                      <span className="text-white font-semibold w-16">{count}</span>
-                      <button
-                        onClick={() => {
-                          // Withdraw from bank (add to player)
-                          setGameState(prev => {
-                            const idx = prev.players.findIndex(p => p.id === player.id);
-                            if (idx === -1) return prev;
-                            const updated = [...prev.players];
-                            updated[idx] = {
-                              ...updated[idx],
-                              resources: {
-                                ...updated[idx].resources,
-                                [resource]: updated[idx].resources[resource] + 1,
-                              },
-                            };
-                            return { ...prev, players: updated };
-                          });
-                        }}
-                        className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xl py-2 rounded-lg transition-all active:scale-95"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => {
-                          // Deposit to bank (remove from player)
-                          if (count > 0) {
-                            setGameState(prev => {
-                              const idx = prev.players.findIndex(p => p.id === player.id);
-                              if (idx === -1) return prev;
-                              const updated = [...prev.players];
-                              updated[idx] = {
-                                ...updated[idx],
-                                resources: {
-                                  ...updated[idx].resources,
-                                  [resource]: updated[idx].resources[resource] - 1,
-                                },
-                              };
-                              return { ...prev, players: updated };
-                            });
-                          }
-                        }}
-                        disabled={count === 0}
-                        className={`flex-1 font-bold text-xl py-2 rounded-lg transition-all active:scale-95 ${
-                          count > 0
-                            ? 'bg-slate-700 hover:bg-slate-600 text-white'
-                            : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                        }`}
-                      >
-                        −
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <p className="text-slate-400 text-xs mt-4 text-center">
-                Click + to withdraw from bank, − to deposit to bank
-              </p>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* === FLOATING HEADER — safe-area aware, compact on mobile === */}
       <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none safe-top">
@@ -1546,10 +1486,10 @@ export default function CatanGamePage() {
         </div>
       </div>
 
-      {/* === RIGHT PANEL — Actions & Resources (floating) === */}
-      {/* On mobile: anchored to bottom as a compact strip; on desktop: right side panel */}
-      <div className="absolute right-1.5 sm:right-3 bottom-16 sm:bottom-auto sm:top-20 w-[calc(100vw-8.5rem)] sm:w-72 z-20 pointer-events-auto overflow-y-auto max-h-[50vh] sm:max-h-[calc(100dvh-6rem)] space-y-2 sm:space-y-3">
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3">
+      {/* === RIGHT PANEL — Actions + Carousel HUD === */}
+      <div className="absolute right-1.5 sm:right-3 bottom-2 sm:bottom-auto sm:top-20 w-[calc(100vw-1rem)] sm:w-80 z-20 pointer-events-auto overflow-y-auto max-h-[55vh] sm:max-h-[calc(100dvh-6rem)] space-y-2">
+        {/* Action panel — always visible */}
+        <div className="bg-black/60 backdrop-blur-md rounded-xl border border-white/10 p-2.5 sm:p-3">
           <ActionPanel 
             gameState={gameState} 
             onAction={handleAction}
@@ -1558,34 +1498,27 @@ export default function CatanGamePage() {
             onOpenTrade={() => setShowTradePanel(true)}
           />
         </div>
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3">
-          <ResourcePanel player={currentPlayer} gameState={gameState} />
-        </div>
-        <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-white/45 font-bold">
-            <span>Dice Flow</span>
-            <span className={gameState.phase === 'roll' ? 'text-amber-300' : 'text-white/35'}>
-              {gameState.phase === 'roll' ? 'Ready' : gameState.diceRoll ? 'Resolved' : 'Waiting'}
-            </span>
-          </div>
-          {diceVisible ? (
-            <div className="flex flex-col items-center gap-2">
-              <CatanDice values={gameState.diceRoll ?? [1, 1]} rollKey={rollKey} />
-              <p className="text-[11px] text-center text-slate-300 leading-relaxed">
-                {gameState.phase === 'roll'
-                  ? 'Press Roll Dice in the Actions panel to begin the turn.'
-                  : gameState.diceRoll
-                    ? `Latest total: ${gameState.diceRoll[0] + gameState.diceRoll[1]}.`
-                    : 'Dice will become active when the turn reaches the roll phase.'}
-              </p>
-            </div>
-          ) : (
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Dice are intentionally hidden during the initial settlement/road setup because no roll is allowed yet.
-            </p>
-          )}
+
+        {/* Carousel HUD — swipeable cards */}
+        <div className="bg-black/60 backdrop-blur-md rounded-xl border border-white/10 p-2.5 sm:p-3">
+          <Suspense fallback={<div className="h-40 flex items-center justify-center text-slate-500 text-xs">Loading HUD...</div>}>
+            <CatanCarouselHUD
+              gameState={gameState}
+              playerId={currentPlayer.id}
+              onBankTrade={(give, receive) => handleAction('bank-trade', { give, receive })}
+              onOpenFullTrade={() => setShowTradePanel(true)}
+              onBuild={(type) => handleAction(`build-${type}`)}
+              onBuyDevCard={() => handleAction('buy-dev-card')}
+            />
+          </Suspense>
         </div>
       </div>
+
+      {/* === RESOURCE FEEDBACK TOASTS === */}
+      <CatanResourceFeedback
+        entries={resourceFeedback}
+        onDismiss={(id) => setResourceFeedback(f => f.filter(e => e.id !== id))}
+      />
 
       {/* === FLOATING DICE OVERLAY — prominent center-screen roll result === */}
       {gameState.diceRoll && gameState.phase !== 'setup-settlement' && gameState.phase !== 'setup-road' && (
