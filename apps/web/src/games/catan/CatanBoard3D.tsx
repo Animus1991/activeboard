@@ -312,7 +312,7 @@ function MountainProps() {
       arr.push({
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
-        s: (0.12 + Math.random() * 0.06) * 2.7,
+        s: (0.12 + Math.random() * 0.06) * 2.85,
         rot: [Math.random(), Math.random(), Math.random()] as [number, number, number]
       });
     }
@@ -370,7 +370,7 @@ function HillsProps() {
 
 function FieldsProps() {
   const stalks = useMemo(() =>
-    Array.from({ length: 240 }).map(() => {
+    Array.from({ length: 480 }).map(() => {
       const angle = Math.random() * Math.PI * 2;
       const radius = 0.60 + Math.random() * 0.40;
       return {
@@ -412,7 +412,7 @@ function PastureProps() {
   return (
     <group>
       {sheep.map((s, i) => (
-        <group key={`sh${i}`} position={[s.x, 0, s.z]} rotation={[0, s.rot, 0]} scale={1.4 * 2.7}>
+        <group key={`sh${i}`} position={[s.x, 0, s.z]} rotation={[0, s.rot, 0]} scale={1.4 * 2.55}>
           {/* Body */}
           <mesh rotation={[0, 0, Math.PI / 2]} position={[0, 0.04, 0]} castShadow>
             <capsuleGeometry args={[0.035, 0.05, 8, 8]} />
@@ -439,21 +439,33 @@ function PastureProps() {
 }
 
 function DesertProps() {
+  const ripples = useMemo(() => {
+    const arr = [];
+    for (let i = -0.7; i <= 0.7; i += 0.12) {
+      if (Math.abs(i) < 0.25) continue; // Leave center empty for token
+      
+      const numSegments = 2 + Math.floor(Math.random() * 2);
+      for(let j=0; j < numSegments; j++) {
+        const xOffset = (Math.random() - 0.5) * 0.15;
+        arr.push({
+          x: i + xOffset,
+          z: (Math.random() - 0.5) * 1.4,
+          len: 0.15 + Math.random() * 0.35,
+          rotY: 0.1 + (Math.random() - 0.5) * 0.1 // Slight angle variation
+        });
+      }
+    }
+    return arr.filter(r => r.x * r.x + r.z * r.z < 0.75); // Keep within hex
+  }, []);
+
   return (
     <group>
-      {/* Smooth sand dune mounds */}
-      <mesh position={[0.7, 0.03 * 3, 0.4]} rotation={[0.08, 0.2, 0.08]} scale={3} castShadow>
-        <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color="#E8C860" roughness={0.9} />
-      </mesh>
-      <mesh position={[-0.4, 0.02 * 3, -0.6]} rotation={[0.1, -0.2, 0.05]} scale={3} castShadow>
-        <sphereGeometry args={[0.15, 16, 16]} />
-        <meshStandardMaterial color="#DDB848" roughness={0.9} />
-      </mesh>
-      <mesh position={[-0.6, 0.01 * 3, 0.3]} rotation={[0, 0.4, 0]} scale={3} castShadow>
-        <sphereGeometry args={[0.12, 16, 16]} />
-        <meshStandardMaterial color="#F0C840" roughness={0.9} />
-      </mesh>
+      {ripples.map((r, i) => (
+        <mesh key={`d${i}`} position={[r.x, 0.005, r.z]} rotation={[Math.PI / 2, 0, r.rotY]} receiveShadow>
+          <capsuleGeometry args={[0.015, r.len, 4, 8]} />
+          <meshStandardMaterial color="#A87422" roughness={0.95} flatShading />
+        </mesh>
+      ))}
     </group>
   );
 }
