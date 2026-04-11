@@ -4,7 +4,7 @@
  * Multi-layer terrain decorations · harbour ports · animated ocean
  */
 
-import { useRef, useState, useMemo, Suspense } from 'react';
+import { useRef, useState, useMemo, Suspense, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, PerspectiveCamera, ContactShadows, Billboard } from '@react-three/drei';
 import { EffectComposer, SMAA } from '@react-three/postprocessing';
@@ -534,6 +534,114 @@ function createHexShape(size: number): THREE.Shape {
 }
 
 // ============================================================================
+// 3D NUMBER TOKEN (Billboard with Flip Animation)
+// ============================================================================
+
+function AnimatedNumberToken3D({ hex, height }: { hex: HexTile; height: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const [revealed, setRevealed] = useState(false);
+  
+  // Random letter A-R assigned once on mount
+  const letter = useMemo(() => String.fromCharCode(65 + Math.floor(Math.random() * 18)), []);
+  
+  useEffect(() => {
+    // Start flipping randomly after a short delay
+    const delay = 1200 + Math.random() * 2500;
+    const t = setTimeout(() => setRevealed(true), delay);
+    return () => clearTimeout(t);
+  }, []);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    const targetY = revealed ? Math.PI : 0;
+    // Spring-like interpolation for rotation
+    groupRef.current.rotation.y += (targetY - groupRef.current.rotation.y) * delta * 6;
+    
+    // Scale bounce pop effect when flipping
+    const progress = Math.abs(groupRef.current.rotation.y / Math.PI);
+    const scale = 1 + Math.sin(progress * Math.PI) * 0.25;
+    groupRef.current.scale.setScalar(scale);
+  });
+
+  const hot = hex.number === 6 || hex.number === 8;
+  const probDots = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 }[hex.number!] || 0;
+
+  return (
+    <group position={[0, height + 0.20, 0]}>
+      {/* Floating soft shadow directly on the hex surface */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.19, 0]}>
+        <circleGeometry args={[0.35, 32]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.35} />
+      </mesh>
+
+      <Billboard follow={true}>
+        <group ref={groupRef}>
+          {/* Back Side (Letter) */}
+          <group>
+            {/* Base disc */}
+            <mesh>
+              <circleGeometry args={[0.38, 32]} />
+              <meshStandardMaterial color="#E8D8B8" roughness={0.5} side={THREE.FrontSide} />
+            </mesh>
+            {/* Border */}
+            <mesh position={[0, 0, 0.005]}>
+              <ringGeometry args={[0.34, 0.38, 32]} />
+              <meshStandardMaterial color="#A08C68" side={THREE.FrontSide} />
+            </mesh>
+            {/* Letter Text */}
+            <Text
+              position={[0, 0, 0.01]}
+              fontSize={0.45}
+              color="#3A2A1A"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={800}
+            >
+              {letter}
+            </Text>
+          </group>
+
+          {/* Front Side (Number) */}
+          <group rotation={[0, Math.PI, 0]}>
+            {/* Base disc */}
+            <mesh>
+              <circleGeometry args={[0.38, 32]} />
+              <meshStandardMaterial color={hot ? '#FFF5E0' : '#FEFCF5'} roughness={0.5} side={THREE.FrontSide} />
+            </mesh>
+            {/* Border */}
+            <mesh position={[0, 0, 0.005]}>
+              <ringGeometry args={[0.34, 0.38, 32]} />
+              <meshStandardMaterial color={hot ? '#C04040' : '#8A7A60'} side={THREE.FrontSide} />
+            </mesh>
+            {/* Number Text */}
+            <Text
+              position={[0, 0.06, 0.01]}
+              fontSize={0.4}
+              color={hot ? '#CC0000' : '#1A1A1A'}
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={hot ? 900 : 700}
+            >
+              {String(hex.number)}
+            </Text>
+            {/* Probability dots */}
+            <Text
+              position={[0, -0.16, 0.01]}
+              fontSize={0.10}
+              color={hot ? '#CC0000' : '#555555'}
+              anchorX="center"
+              anchorY="middle"
+            >
+              {'•'.repeat(probDots)}
+            </Text>
+          </group>
+        </group>
+      </Billboard>
+    </group>
+  );
+}
+
+// ============================================================================
 // HEX TILE — 3D terrain tile
 // ============================================================================
 
@@ -600,63 +708,10 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         </group>
       )}
 
-      {/* Number token — large cream/white disc flat on hex with number printed on surface */}
-      {hex.number && !hex.hasRobber && (() => {
-        const hot = hex.number === 6 || hex.number === 8;
-        const probDots = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 }[hex.number] || 0;
-        return (
-          <group position={[0, mat.height + 0.02, 0]}>
-            {/* Shadow disc underneath */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.005, 0]}>
-              <circleGeometry args={[0.48, 32]} />
-              <meshBasicMaterial color="#000000" transparent opacity={0.18} />
-            </mesh>
-            {/* White/cream disc — flat cylinder on hex surface */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[0.44, 0.44, 0.05, 32]} />
-              <meshStandardMaterial
-                color={hot ? '#FFF5E0' : '#FEFCF5'}
-                roughness={0.75}
-                metalness={0.0}
-                emissive={hot ? '#3A1000' : '#181510'}
-                emissiveIntensity={0.06}
-              />
-            </mesh>
-            {/* Thin border ring */}
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, 0]}>
-              <ringGeometry args={[0.40, 0.44, 32]} />
-              <meshStandardMaterial
-                color={hot ? '#C04040' : '#8A7A60'}
-                roughness={0.6}
-                metalness={0.1}
-              />
-            </mesh>
-            {/* Number text — flat on disc surface */}
-            <Text
-              position={[0, 0.032, 0]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.38}
-              color={hot ? '#CC0000' : '#1A1A1A'}
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={hot ? 900 : 700}
-            >
-              {String(hex.number)}
-            </Text>
-            {/* Probability dots below number */}
-            <Text
-              position={[0, 0.032, 0.22]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={0.08}
-              color={hot ? '#CC0000' : '#555555'}
-              anchorX="center"
-              anchorY="middle"
-            >
-              {'•'.repeat(probDots)}
-            </Text>
-          </group>
-        );
-      })()}
+      {/* Number token — Billboard flip animation from letter to number */}
+      {hex.number && !hex.hasRobber && (
+        <AnimatedNumberToken3D hex={hex} height={mat.height} />
+      )}
 
       {/* Robber — storybook dark wood figurine */}
       {hex.hasRobber && (
