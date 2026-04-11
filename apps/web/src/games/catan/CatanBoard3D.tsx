@@ -6,7 +6,7 @@
 
 import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, PerspectiveCamera, ContactShadows } from '@react-three/drei';
+import { OrbitControls, Text, PerspectiveCamera, ContactShadows, Billboard } from '@react-three/drei';
 import { EffectComposer, SMAA } from '@react-three/postprocessing';
 import { useKeyboardControls } from './CatanHUDFeatures';
 import { XR, createXRStore } from '@react-three/xr';
@@ -546,7 +546,6 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
   const [hovered, setHovered] = useState(false);
   const pos = useMemo(() => hexToWorld(hex.position.q, hex.position.r), [hex.position]);
   const mat = TERRAIN_MATS[hex.terrain] || TERRAIN_MATS.desert;
-  const stoneRoughness = useMemo(() => getProceduralTexture('stone'), []);
 
   const hexShape  = useMemo(() => createHexShape(HEX_SIZE), []);
   const extrudeSettings = useMemo(() => ({
@@ -557,27 +556,7 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
     bevelSegments: 2,
   }), [mat.height]);
 
-  const isRocky = hex.terrain === 'mountains' || hex.terrain === 'hills';
-  const isWindy = hex.terrain === 'forest' || hex.terrain === 'fields' || hex.terrain === 'pasture';
-
-  const onBeforeCompile = useMemo(() => {
-    if (!isWindy) return undefined;
-    return (shader: any) => {
-      shader.uniforms.time = _windUniforms.time;
-      shader.vertexShader = `
-        uniform float time;
-        ${shader.vertexShader}
-      `.replace(
-        `#include <begin_vertex>`,
-        `
-        #include <begin_vertex>
-        // Subtle wind swaying effect mapped to world position
-        float sway = sin(position.x * 4.0 + time * 1.5) * cos(position.y * 4.0 + time * 1.2) * 0.015;
-        transformed.z += sway;
-        `
-      );
-    };
-  }, [isWindy]);
+  // Wind effect and stone roughness removed for clarity
 
   return (
     <group position={[pos[0], 0, pos[2]]}>
@@ -599,60 +578,57 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         />
       </mesh>
 
-      {/* Top surface — illustrated terrain texture (like real Catan cardboard tile artwork) */}
+      {/* Top surface — clean terrain texture without shader effects */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, mat.height + 0.004, 0]} receiveShadow>
         <shapeGeometry args={[hexShape]} />
-        <meshPhysicalMaterial
+        <meshStandardMaterial
           map={getTerrainTexture(hex.terrain)}
-          roughness={isRocky ? 0.88 : 0.95}
+          roughness={0.92}
           metalness={0.0}
-          roughnessMap={isRocky ? stoneRoughness : undefined}
-          bumpMap={isRocky ? stoneRoughness : undefined}
-          bumpScale={isRocky ? 0.015 : 0}
           emissive={mat.emissive}
-          emissiveIntensity={0.10}
-          clearcoat={0}
-          clearcoatRoughness={0}
-          onBeforeCompile={onBeforeCompile}
+          emissiveIntensity={0.08}
         />
       </mesh>
 
-      {/* Number token — simplified for clarity */}
+      {/* Number token — clean white disc with camera-facing number */}
       {hex.number && !hex.hasRobber && (() => {
         const hot = hex.number === 6 || hex.number === 8;
         return (
           <group position={[0, mat.height + 0.08, 0]}>
-            {/* Simple white background circle */}
+            {/* White/red background disc lying flat on hex */}
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[0.45, 0.45, 0.04, 32]} />
+              <cylinderGeometry args={[0.38, 0.38, 0.03, 32]} />
               <meshStandardMaterial
-                color={hot ? '#FF6B6B' : '#FFFFFF'}
-                roughness={0.8}
+                color={hot ? '#E8E0D0' : '#F5F0E8'}
+                roughness={0.85}
                 metalness={0.0}
               />
             </mesh>
-            {/* Number — simplified for clarity */}
-            <Text
-              position={[0, 0.15, 0]}
-              rotation={[0, 0, 0]}
-              fontSize={0.35}
-              color={hot ? '#000000' : '#000000'}
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={900}
-            >
-              {String(hex.number)}
-            </Text>
-          </group>
-        );
-      })()}
-
-      {/* 3D Terrain Props — volumetric decorations on the hex surface */}
-      {TERRAIN_PROPS[hex.terrain] && (() => {
-        const PropComponent = TERRAIN_PROPS[hex.terrain];
-        return (
-          <group position={[0, mat.height + 0.005, 0]}>
-            <PropComponent />
+            {/* Number — always faces camera using Billboard */}
+            <Billboard position={[0, 0.25, 0]}>
+              <Text
+                fontSize={0.32}
+                color={hot ? '#CC0000' : '#1A1A1A'}
+                anchorX="center"
+                anchorY="middle"
+                fontWeight={hot ? 900 : 700}
+              >
+                {String(hex.number)}
+              </Text>
+            </Billboard>
+            {/* Probability dots under number */}
+            {hot && (
+              <Billboard position={[0, 0.10, 0]}>
+                <Text
+                  fontSize={0.10}
+                  color="#CC0000"
+                  anchorX="center"
+                  anchorY="middle"
+                >
+                  {'•••••'}
+                </Text>
+              </Billboard>
+            )}
           </group>
         );
       })()}
@@ -691,7 +667,7 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
   );
 }
 
-function getProbDots(n: number): number {
+function _getProbDots(n: number): number {
   const dots: Record<number, number> = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 };
   return dots[n] || 0;
 }
@@ -917,7 +893,7 @@ function DesertProps() {
   );
 }
 
-const TERRAIN_PROPS: Record<string, React.FC> = {
+const _TERRAIN_PROPS: Record<string, React.FC> = {
   forest: ForestProps,
   mountains: MountainProps,
   hills: HillsProps,
