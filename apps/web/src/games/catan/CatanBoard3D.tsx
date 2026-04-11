@@ -4,7 +4,7 @@
  * Multi-layer terrain decorations · harbour ports · animated ocean
  */
 
-import { useRef, useState, useMemo, Suspense, useEffect } from 'react';
+import { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, PerspectiveCamera, ContactShadows, Billboard } from '@react-three/drei';
 import { EffectComposer, SMAA } from '@react-three/postprocessing';
@@ -101,31 +101,6 @@ function createHexShape(size: number): THREE.Shape {
 // ============================================================================
 
 function AnimatedNumberToken3D({ hex, height }: { hex: HexTile; height: number }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const [revealed, setRevealed] = useState(false);
-  
-  // Random letter A-R assigned once on mount
-  const letter = useMemo(() => String.fromCharCode(65 + Math.floor(Math.random() * 18)), []);
-  
-  useEffect(() => {
-    // Start flipping randomly after a short delay
-    const delay = 1200 + Math.random() * 2500;
-    const t = setTimeout(() => setRevealed(true), delay);
-    return () => clearTimeout(t);
-  }, []);
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-    const targetY = revealed ? Math.PI : 0;
-    // Spring-like interpolation for rotation
-    groupRef.current.rotation.y += (targetY - groupRef.current.rotation.y) * delta * 6;
-    
-    // Scale bounce pop effect when flipping
-    const progress = Math.abs(groupRef.current.rotation.y / Math.PI);
-    const scale = 1 + Math.sin(progress * Math.PI) * 0.25;
-    groupRef.current.scale.setScalar(scale);
-  });
-
   const hot = hex.number === 6 || hex.number === 8;
   const probDots = { 2:1, 3:2, 4:3, 5:4, 6:5, 8:5, 9:4, 10:3, 11:2, 12:1 }[hex.number!] || 0;
 
@@ -137,67 +112,40 @@ function AnimatedNumberToken3D({ hex, height }: { hex: HexTile; height: number }
         <meshBasicMaterial color="#000000" transparent opacity={0.35} />
       </mesh>
 
+      {/* Front Side (Number) statically facing camera via Billboard but no flip animation */}
       <Billboard follow={true}>
-        <group ref={groupRef}>
-          {/* Back Side (Letter) */}
-          <group>
-            {/* Base disc */}
-            <mesh>
-              <circleGeometry args={[0.38, 32]} />
-              <meshStandardMaterial color="#E8D8B8" roughness={0.5} side={THREE.FrontSide} />
-            </mesh>
-            {/* Border */}
-            <mesh position={[0, 0, 0.005]}>
-              <ringGeometry args={[0.34, 0.38, 32]} />
-              <meshStandardMaterial color="#A08C68" side={THREE.FrontSide} />
-            </mesh>
-            {/* Letter Text */}
-            <Text
-              position={[0, 0, 0.01]}
-              fontSize={0.45}
-              color="#3A2A1A"
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={800}
-            >
-              {letter}
-            </Text>
-          </group>
-
-          {/* Front Side (Number) */}
-          <group rotation={[0, Math.PI, 0]}>
-            {/* Base disc */}
-            <mesh>
-              <circleGeometry args={[0.38, 32]} />
-              <meshStandardMaterial color={hot ? '#FFF5E0' : '#FEFCF5'} roughness={0.5} side={THREE.FrontSide} />
-            </mesh>
-            {/* Border */}
-            <mesh position={[0, 0, 0.005]}>
-              <ringGeometry args={[0.34, 0.38, 32]} />
-              <meshStandardMaterial color={hot ? '#C04040' : '#8A7A60'} side={THREE.FrontSide} />
-            </mesh>
-            {/* Number Text */}
-            <Text
-              position={[0, 0.06, 0.01]}
-              fontSize={0.4}
-              color={hot ? '#CC0000' : '#1A1A1A'}
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={hot ? 900 : 700}
-            >
-              {String(hex.number)}
-            </Text>
-            {/* Probability dots */}
-            <Text
-              position={[0, -0.16, 0.01]}
-              fontSize={0.10}
-              color={hot ? '#CC0000' : '#555555'}
-              anchorX="center"
-              anchorY="middle"
-            >
-              {'•'.repeat(probDots)}
-            </Text>
-          </group>
+        <group>
+          {/* Base disc */}
+          <mesh>
+            <circleGeometry args={[0.38, 32]} />
+            <meshStandardMaterial color={hot ? '#FFF5E0' : '#FEFCF5'} roughness={0.5} side={THREE.FrontSide} />
+          </mesh>
+          {/* Border */}
+          <mesh position={[0, 0, 0.005]}>
+            <ringGeometry args={[0.34, 0.38, 32]} />
+            <meshStandardMaterial color={hot ? '#C04040' : '#8A7A60'} side={THREE.FrontSide} />
+          </mesh>
+          {/* Number Text */}
+          <Text
+            position={[0, 0.06, 0.01]}
+            fontSize={0.4}
+            color={hot ? '#CC0000' : '#1A1A1A'}
+            anchorX="center"
+            anchorY="middle"
+            fontWeight={hot ? 900 : 700}
+          >
+            {String(hex.number)}
+          </Text>
+          {/* Probability dots */}
+          <Text
+            position={[0, -0.16, 0.01]}
+            fontSize={0.10}
+            color={hot ? '#CC0000' : '#555555'}
+            anchorX="center"
+            anchorY="middle"
+          >
+            {'•'.repeat(probDots)}
+          </Text>
         </group>
       </Billboard>
     </group>
@@ -316,12 +264,16 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
 
 function ForestProps() {
   const trees = useMemo(() =>
-    Array.from({ length: 16 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.6,
-      z: (Math.random() - 0.5) * 1.6,
-      scale: 0.5 + Math.random() * 0.6,
-      rotation: Math.random() * Math.PI,
-    })).filter(t => t.x * t.x + t.z * t.z > 0.25),
+    Array.from({ length: 12 }).map(() => {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 0.65 + Math.random() * 0.35;
+      return {
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        scale: (0.5 + Math.random() * 0.4) * 3,
+        rotation: Math.random() * Math.PI,
+      };
+    }),
   []);
   return (
     <group>
@@ -352,17 +304,20 @@ function ForestProps() {
 }
 
 function MountainProps() {
-  const peaks = useMemo(() => [
-    { x: 0.25, z: -0.2, s: 0.25, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: -0.3, z: 0.25, s: 0.22, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: 0.0, z: 0.35, s: 0.20, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: -0.1, z: -0.35, s: 0.18, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: 0.3, z: 0.25, s: 0.15, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    // Some extra small rocks around the base
-    { x: -0.4, z: -0.1, s: 0.10, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: 0.1, z: -0.5, s: 0.08, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-    { x: 0.4, z: 0.0, s: 0.12, rot: [Math.random(), Math.random(), Math.random()] as [number, number, number] },
-  ], []);
+  const peaks = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
+      const radius = 0.65 + Math.random() * 0.25;
+      arr.push({
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        s: (0.12 + Math.random() * 0.06) * 3,
+        rot: [Math.random(), Math.random(), Math.random()] as [number, number, number]
+      });
+    }
+    return arr;
+  }, []);
   return (
     <group>
       {peaks.map((p, i) => (
@@ -386,35 +341,27 @@ function MountainProps() {
 }
 
 function HillsProps() {
-  const mounds = useMemo(() =>
-    Array.from({ length: 6 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.2,
-      z: (Math.random() - 0.5) * 1.2,
-      sx: 0.25 + Math.random() * 0.20,
-      sy: 0.12 + Math.random() * 0.15,
-      sz: 0.25 + Math.random() * 0.20,
-      col: ['#8A5028', '#9A6038', '#704020'][Math.floor(Math.random() * 3)],
-    })).filter(m => m.x * m.x + m.z * m.z > 0.18),
-  []);
-  const smallRocks = useMemo(() =>
-    Array.from({ length: 10 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.3,
-      z: (Math.random() - 0.5) * 1.3,
-      s: 0.02 + Math.random() * 0.03,
-    })).filter(r => r.x * r.x + r.z * r.z > 0.15),
-  []);
+  const bricks = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < 9; i++) {
+      const angle = (i / 9) * Math.PI * 2 + (Math.random() * 0.3 - 0.15);
+      const radius = 0.65 + Math.random() * 0.25;
+      arr.push({
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        scale: 3,
+        rot: [0, Math.random() * Math.PI, 0] as [number, number, number],
+        col: ['#B85428', '#A04018', '#C86438'][Math.floor(Math.random() * 3)],
+      });
+    }
+    return arr;
+  }, []);
   return (
     <group>
-      {mounds.map((m, i) => (
-        <mesh key={i} position={[m.x, m.sy * 0.5, m.z]} scale={[m.sx, m.sy, m.sz]} castShadow receiveShadow>
-          <sphereGeometry args={[1, 24, 24]} />
-          <meshStandardMaterial color={m.col} roughness={0.97} />
-        </mesh>
-      ))}
-      {smallRocks.map((r, i) => (
-        <mesh key={`hr${i}`} position={[r.x, 0.02, r.z]} scale={r.s} rotation={[Math.random(), Math.random(), 0]} castShadow>
-          <dodecahedronGeometry />
-          <meshStandardMaterial color={Math.random() > 0.5 ? '#5A4A3A' : '#4A3A2A'} roughness={0.96} metalness={0.0} />
+      {bricks.map((b, i) => (
+        <mesh key={i} position={[b.x, 0.04 * b.scale, b.z]} scale={b.scale} rotation={b.rot} castShadow receiveShadow>
+          <boxGeometry args={[0.12, 0.08, 0.06]} />
+          <meshStandardMaterial color={b.col} roughness={0.9} />
         </mesh>
       ))}
     </group>
@@ -423,15 +370,15 @@ function HillsProps() {
 
 function FieldsProps() {
   const stalks = useMemo(() =>
-    Array.from({ length: 120 }).map(() => {
+    Array.from({ length: 60 }).map(() => {
       const angle = Math.random() * Math.PI * 2;
-      const radius = 0.32 + Math.random() * 0.45; // Avoid center token
+      const radius = 0.60 + Math.random() * 0.40;
       return {
         x: Math.cos(angle) * radius,
         z: Math.sin(angle) * radius,
         rotX: (Math.random() - 0.5) * 0.3,
         rotZ: (Math.random() - 0.5) * 0.3,
-        scaleY: 0.6 + Math.random() * 0.6,
+        scaleY: (0.5 + Math.random() * 0.5) * 3,
         col: Math.random() > 0.4 ? '#E8B830' : '#F0C840',
       };
     }),
@@ -449,30 +396,23 @@ function FieldsProps() {
 }
 
 function PastureProps() {
-  const grassClumps = useMemo(() =>
-    Array.from({ length: 20 }).map(() => ({
-      x: (Math.random() - 0.5) * 1.4,
-      z: (Math.random() - 0.5) * 1.4,
-      s: 0.03 + Math.random() * 0.06,
-    })).filter(g => g.x * g.x + g.z * g.z > 0.20),
-  []);
-  const sheep = useMemo(() => [
-    { x: 0.45, z: 0.3, rot: Math.random() * Math.PI * 2 }, 
-    { x: -0.4, z: -0.4, rot: Math.random() * Math.PI * 2 }, 
-    { x: 0.1, z: -0.55, rot: Math.random() * Math.PI * 2 },
-    { x: -0.45, z: 0.25, rot: Math.random() * Math.PI * 2 },
-    { x: 0.2, z: 0.45, rot: Math.random() * Math.PI * 2 },
-  ], []);
+  const sheep = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2 + (Math.random() * 0.4 - 0.2);
+      const radius = 0.65 + Math.random() * 0.25;
+      arr.push({
+        x: Math.cos(angle) * radius,
+        z: Math.sin(angle) * radius,
+        rot: Math.random() * Math.PI * 2
+      });
+    }
+    return arr;
+  }, []);
   return (
     <group>
-      {grassClumps.map((g, i) => (
-        <mesh key={`g${i}`} position={[g.x, g.s * 0.3, g.z]} scale={g.s}>
-          <sphereGeometry args={[1, 8, 8]} />
-          <meshStandardMaterial color="#5CB838" roughness={0.97} flatShading />
-        </mesh>
-      ))}
       {sheep.map((s, i) => (
-        <group key={`sh${i}`} position={[s.x, 0.04, s.z]} rotation={[0, s.rot, 0]} scale={1.4}>
+        <group key={`sh${i}`} position={[s.x, 0, s.z]} rotation={[0, s.rot, 0]} scale={1.4 * 3}>
           {/* Body */}
           <mesh rotation={[0, 0, Math.PI / 2]} position={[0, 0.04, 0]} castShadow>
             <capsuleGeometry args={[0.035, 0.05, 8, 8]} />
@@ -502,25 +442,18 @@ function DesertProps() {
   return (
     <group>
       {/* Smooth sand dune mounds */}
-      <mesh position={[0.25, 0.03, 0.12]} rotation={[0.08, 0.2, 0.08]} castShadow>
-        <sphereGeometry args={[0.30, 24, 24]} />
-        <meshStandardMaterial color="#D8A030" roughness={0.97} />
+      <mesh position={[0.7, 0.03 * 3, 0.4]} rotation={[0.08, 0.2, 0.08]} scale={3} castShadow>
+        <sphereGeometry args={[0.2, 16, 16]} />
+        <meshStandardMaterial color="#E8C860" roughness={0.9} />
       </mesh>
-      <mesh position={[-0.30, 0.02, -0.20]} rotation={[-0.06, -0.3, 0]} castShadow>
-        <sphereGeometry args={[0.22, 24, 24]} />
-        <meshStandardMaterial color="#C08820" roughness={0.97} />
+      <mesh position={[-0.4, 0.02 * 3, -0.6]} rotation={[0.1, -0.2, 0.05]} scale={3} castShadow>
+        <sphereGeometry args={[0.15, 16, 16]} />
+        <meshStandardMaterial color="#DDB848" roughness={0.9} />
       </mesh>
-      {/* Hand-painted cactus — smooth cylinders */}
-      <group position={[0.12, 0.06, -0.35]} scale={0.4}>
-        <mesh castShadow>
-          <cylinderGeometry args={[0.025, 0.025, 0.18, 12]} />
-          <meshStandardMaterial color="#2A7038" roughness={0.96} />
-        </mesh>
-        <mesh position={[0.04, 0.04, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.018, 0.018, 0.08, 12]} />
-          <meshStandardMaterial color="#2A7038" roughness={0.96} />
-        </mesh>
-      </group>
+      <mesh position={[-0.6, 0.01 * 3, 0.3]} rotation={[0, 0.4, 0]} scale={3} castShadow>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshStandardMaterial color="#F0C840" roughness={0.9} />
+      </mesh>
     </group>
   );
 }
