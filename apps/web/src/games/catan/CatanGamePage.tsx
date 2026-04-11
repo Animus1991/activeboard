@@ -1302,20 +1302,20 @@ export default function CatanGamePage() {
             ))}
           </div>
 
-          {/* Save / Load / Undo + HUD toggles */}
-          <div className="pointer-events-auto flex items-center gap-1 bg-black/60 backdrop-blur-md rounded-xl px-2 py-1.5 border border-white/10">
+          {/* Save / Load / Undo — always visible; HUD toggles hidden on mobile */}
+          <div className="pointer-events-auto flex items-center gap-0.5 sm:gap-1 bg-black/60 backdrop-blur-md rounded-xl px-1.5 sm:px-2 py-1 sm:py-1.5 border border-white/10">
             <button
               onClick={() => handleAction('undo')}
               disabled={!canUndo()}
               title="Undo last action"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors"
+              className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
             >
               <Undo2 className="w-4 h-4" />
             </button>
             <button
               onClick={() => handleAction('save')}
               title="Save game"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
             >
               <Save className="w-4 h-4" />
             </button>
@@ -1323,87 +1323,88 @@ export default function CatanGamePage() {
               <button
                 onClick={() => handleAction('load')}
                 title="Load saved game"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
               >
                 <FolderOpen className="w-4 h-4" />
               </button>
             )}
-            <div className="w-px h-4 bg-white/15 mx-0.5" />
+            <div className="w-px h-4 bg-white/15 mx-0.5 hidden sm:block" />
+            {/* HUD toggles — hidden on mobile to save space */}
             <button
               onClick={() => setShowTutorial(v => !v)}
               title="Tutorial"
-              className={`p-1.5 rounded-lg transition-colors ${showTutorial ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showTutorial ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <HelpCircle className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowRules(v => !v)}
               title="Rules Reference"
-              className={`p-1.5 rounded-lg transition-colors ${showRules ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showRules ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <BookOpen className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowChat(v => !v)}
               title="Chat"
-              className={`p-1.5 rounded-lg transition-colors ${showChat ? 'text-green-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showChat ? 'text-green-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <MessageSquare className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowDiceHistory(v => !v)}
               title="Dice History"
-              className={`p-1.5 rounded-lg transition-colors ${showDiceHistory ? 'text-orange-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showDiceHistory ? 'text-orange-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <BarChart3 className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowSaveLoad(v => !v)}
               title="Save / Load"
-              className={`p-1.5 rounded-lg transition-colors ${showSaveLoad ? 'text-purple-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showSaveLoad ? 'text-purple-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Save className="w-4 h-4" />
             </button>
             <button
               onClick={() => { setShowReplay(v => !v); setReplayIndex(gameState.log.length - 1); }}
               title="Replay Log"
-              className={`p-1.5 rounded-lg transition-colors ${showReplay ? 'text-cyan-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showReplay ? 'text-cyan-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <ListOrdered className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowLeaderboard(v => !v)}
               title="Leaderboard"
-              className={`p-1.5 rounded-lg transition-colors ${showLeaderboard ? 'text-yellow-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showLeaderboard ? 'text-yellow-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Trophy className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowTxLog(v => !v)}
               title="Transaction Log"
-              className={`p-1.5 rounded-lg transition-colors ${showTxLog ? 'text-pink-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showTxLog ? 'text-pink-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <ArrowUpDown className="w-4 h-4" />
             </button>
-            <div className="w-px h-4 bg-white/15 mx-0.5" />
+            <div className="w-px h-4 bg-white/15 mx-0.5 hidden sm:block" />
             <button
               onClick={() => setLayoutMode(v => !v)}
               title="Layout Mode — drag panels in 3D space"
-              className={`p-1.5 rounded-lg transition-colors ${layoutMode ? 'text-teal-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${layoutMode ? 'text-teal-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Move className="w-4 h-4" />
             </button>
             <button
               onClick={() => setSoundMuted(v => !v)}
               title={soundMuted ? 'Unmute sounds' : 'Mute sounds'}
-              className={`p-1.5 rounded-lg transition-colors ${soundMuted ? 'text-red-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`p-2 sm:p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center ${soundMuted ? 'text-red-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
             <button
               onClick={() => setShowSettings(v => !v)}
               title="Settings"
-              className={`p-1.5 rounded-lg transition-colors ${showSettings ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+              className={`p-2 sm:p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center ${showSettings ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -1466,8 +1467,8 @@ export default function CatanGamePage() {
         </div>
       </div>
 
-      {/* === LEFT PANEL — Players (floating, collapses on mobile) === */}
-      <div className="absolute left-1.5 sm:left-3 top-16 sm:top-20 w-48 sm:w-64 z-20 pointer-events-auto overflow-y-auto max-h-[calc(100dvh-5rem)] sm:max-h-[calc(100dvh-6rem)]">
+      {/* === LEFT PANEL — Players (hidden on mobile, floating on desktop) === */}
+      <div className="absolute left-1.5 sm:left-3 top-16 sm:top-20 w-48 sm:w-64 z-20 pointer-events-auto overflow-y-auto max-h-[calc(100dvh-5rem)] sm:max-h-[calc(100dvh-6rem)] hidden sm:block">
         <div className="bg-black/50 backdrop-blur-md rounded-xl border border-white/10 p-2 sm:p-3 space-y-1.5 sm:space-y-2">
           <h2 className="text-xs sm:text-sm font-bold text-white/80 flex items-center gap-1.5 sm:gap-2 px-1">
             <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
@@ -1487,7 +1488,8 @@ export default function CatanGamePage() {
       </div>
 
       {/* === RIGHT PANEL — Actions + Carousel HUD === */}
-      <div className="absolute right-1.5 sm:right-3 bottom-2 sm:bottom-auto sm:top-20 w-[calc(100vw-1rem)] sm:w-80 z-20 pointer-events-auto overflow-y-auto max-h-[55vh] sm:max-h-[calc(100dvh-6rem)] space-y-2">
+      {/* Mobile: bottom-sheet anchored full-width; Desktop: floating right panel */}
+      <div className="absolute left-1 right-1 bottom-1 sm:left-auto sm:right-3 sm:bottom-auto sm:top-20 sm:w-80 z-20 pointer-events-auto overflow-y-auto max-h-[50vh] sm:max-h-[calc(100dvh-6rem)] space-y-2 safe-bottom">
         {/* Action panel — always visible */}
         <div className="bg-black/60 backdrop-blur-md rounded-xl border border-white/10 p-2.5 sm:p-3">
           <ActionPanel 

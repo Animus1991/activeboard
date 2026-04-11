@@ -551,9 +551,9 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
   const extrudeSettings = useMemo(() => ({
     depth: mat.height,
     bevelEnabled: true,
-    bevelThickness: 0.014,
-    bevelSize: 0.014,
-    bevelSegments: 2,
+    bevelThickness: 0.008,
+    bevelSize: 0.008,
+    bevelSegments: 1,
   }), [mat.height]);
 
   // Wind effect and stone roughness removed for clarity
@@ -578,8 +578,8 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
         />
       </mesh>
 
-      {/* Top surface — clean terrain texture without shader effects */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, mat.height + 0.004, 0]} receiveShadow>
+      {/* Top surface — elevated above extrude body to prevent z-fighting */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, mat.height + 0.012, 0]} receiveShadow>
         <shapeGeometry args={[hexShape]} />
         <meshStandardMaterial
           map={getTerrainTexture(hex.terrain)}
@@ -587,6 +587,9 @@ function HexTile3D({ hex, onHexClick }: HexTile3DProps) {
           metalness={0.0}
           emissive={mat.emissive}
           emissiveIntensity={0.08}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
         />
       </mesh>
 
