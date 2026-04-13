@@ -356,50 +356,92 @@ function BoardContent({ gameState, rolling }: MonopolyBoard3DProps) {
 
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[10, 10, 5]} intensity={0.8} castShadow />
-      <pointLight position={[-5, 5, -5]} intensity={0.3} />
+      {/* Cinematic Lighting — warm museum-gallery feel */}
+      <ambientLight intensity={0.55} color="#FFF5E0" />
+      <directionalLight
+        position={[8, 22, 6]}
+        intensity={1.8}
+        color="#FFF0D0"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={40}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+        shadow-bias={-0.0002}
+      />
+      <directionalLight position={[-6, 14, -5]} intensity={0.5} color="#C0D8FF" />
+      <pointLight position={[0, 8, 0]} intensity={0.4} color="#FFE0B0" distance={20} />
 
       {/* Camera */}
-      <PerspectiveCamera makeDefault position={[8, 12, 8]} fov={50} />
+      <PerspectiveCamera makeDefault position={[0, 16, 9]} fov={42} />
       <OrbitControls 
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
         minDistance={5}
-        maxDistance={20}
-        maxPolarAngle={Math.PI / 2.2}
+        maxDistance={25}
+        maxPolarAngle={Math.PI / 2.15}
+        minPolarAngle={0.1}
       />
 
-      {/* Sky/background color */}
-      <color attach="background" args={['#1a1a2e']} />
-      <fog attach="fog" args={['#1a1a2e', 15, 30]} />
+      {/* Background — warm dark room */}
+      <color attach="background" args={['#14100A']} />
+      <fog attach="fog" args={['#14100A', 18, 35]} />
 
       {/* Board base */}
       <group ref={boardRef}>
-        {/* Main board surface */}
-        <mesh position={[0, 0, 0]} receiveShadow>
-          <boxGeometry args={[BOARD_SIZE + 1, BOARD_THICKNESS, BOARD_SIZE + 1]} />
-          <meshStandardMaterial color="#C4A484" roughness={0.9} />
+        {/* Main board surface — off-white with subtle warmth */}
+        <mesh position={[0, 0, 0]} receiveShadow castShadow>
+          <boxGeometry args={[BOARD_SIZE + 1, BOARD_THICKNESS + 0.05, BOARD_SIZE + 1]} />
+          <meshStandardMaterial color="#E8DCC0" roughness={0.75} metalness={0.02} />
         </mesh>
 
-        {/* Center area */}
-        <mesh position={[0, BOARD_THICKNESS / 2 + 0.01, 0]}>
+        {/* Board edge trim — brass/gold frame */}
+        {[
+          { pos: [0, 0.04, (BOARD_SIZE + 1) / 2] as [number, number, number], size: [BOARD_SIZE + 1.1, 0.08, 0.08] as [number, number, number] },
+          { pos: [0, 0.04, -(BOARD_SIZE + 1) / 2] as [number, number, number], size: [BOARD_SIZE + 1.1, 0.08, 0.08] as [number, number, number] },
+          { pos: [(BOARD_SIZE + 1) / 2, 0.04, 0] as [number, number, number], size: [0.08, 0.08, BOARD_SIZE + 1.1] as [number, number, number] },
+          { pos: [-(BOARD_SIZE + 1) / 2, 0.04, 0] as [number, number, number], size: [0.08, 0.08, BOARD_SIZE + 1.1] as [number, number, number] },
+        ].map((edge, i) => (
+          <mesh key={`edge-${i}`} position={edge.pos}>
+            <boxGeometry args={edge.size} />
+            <meshStandardMaterial color="#B8860B" roughness={0.25} metalness={0.7} />
+          </mesh>
+        ))}
+
+        {/* Center area — warm parchment */}
+        <mesh position={[0, BOARD_THICKNESS / 2 + 0.02, 0]}>
           <boxGeometry args={[BOARD_SIZE - 2, 0.01, BOARD_SIZE - 2]} />
-          <meshStandardMaterial color="#E8DCC8" roughness={0.8} />
+          <meshStandardMaterial color="#F5EDD8" roughness={0.85} />
         </mesh>
 
         {/* Monopoly logo in center */}
         <Text
-          position={[0, BOARD_THICKNESS + 0.02, 0]}
+          position={[0, BOARD_THICKNESS + 0.04, -0.3]}
           rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={0.5}
+          fontSize={0.6}
           color="#B22222"
           anchorX="center"
           anchorY="middle"
+          fontWeight={900}
+          outlineWidth={0.02}
+          outlineColor="#800000"
         >
           MONOPOLY
+        </Text>
+        <Text
+          position={[0, BOARD_THICKNESS + 0.04, 0.4]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={0.14}
+          color="#8B7355"
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={600}
+        >
+          TableForge Edition
         </Text>
 
         {/* Board spaces */}
@@ -435,10 +477,20 @@ function BoardContent({ gameState, rolling }: MonopolyBoard3DProps) {
         <Dice values={gameState.diceRoll} rolling={rolling || false} />
       </group>
 
-      {/* Table surface */}
-      <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[30, 30]} />
-        <meshStandardMaterial color="#2D5016" roughness={0.9} />
+      {/* Casino felt table surface */}
+      <mesh position={[0, -0.3, 0]} receiveShadow>
+        <cylinderGeometry args={[14, 14.2, 0.5, 64]} />
+        <meshStandardMaterial color="#1A3A10" roughness={0.92} metalness={0.0} />
+      </mesh>
+      {/* Table felt top */}
+      <mesh position={[0, -0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[14, 64]} />
+        <meshStandardMaterial color="#2A5518" roughness={0.95} metalness={0.0} />
+      </mesh>
+      {/* Table edge brass ring */}
+      <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[13.9, 14.15, 64]} />
+        <meshStandardMaterial color="#B8860B" roughness={0.3} metalness={0.65} />
       </mesh>
     </>
   );

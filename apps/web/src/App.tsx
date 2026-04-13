@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/contexts/AuthContext';
 import LandingPage from '@/pages/LandingPage';
@@ -34,6 +34,8 @@ export default function App() {
           <Route path="/games/catan" element={<CatanGamePage />} />
           <Route path="/games/codenames" element={<CodenamesGamePage />} />
           <Route path="/games/risk" element={<RiskGamePage />} />
+          <Route path="/games" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/games/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/player" element={<PlayerDashboardPage />} />
         </Routes>
         <Toaster />

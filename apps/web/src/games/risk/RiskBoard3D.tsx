@@ -80,7 +80,7 @@ function TerritoryPiece({ territory, playerColor, continentColor, isSelected, is
       {/* Continent background circle (always visible, shows which continent) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.001, 0]}>
         <circleGeometry args={[1.3, 24]} />
-        <meshStandardMaterial color={continentColor} roughness={0.8} transparent opacity={0.4} />
+        <meshStandardMaterial color={continentColor} roughness={0.8} transparent opacity={0.2} />
       </mesh>
 
       {/* Highlight ring when selected/attacking */}
@@ -248,143 +248,128 @@ function ConnectionLines({ gameState }: { gameState: GameState }) {
 }
 
 // ============================================================================
-// CONTINENT BORDER DASHED LINES — clearly outlines each world region
+// CONTINENT LANDMASS SHAPES — filled polygon regions like a real Risk map
 // ============================================================================
 
-function ContinentBorders({ gameState }: { gameState: GameState }) {
-  // 1) Dashed outlines around each continent
-  const outlines = useMemo(() => {
-    return CONTINENTS.map(continent => {
-      const territories = gameState.territories.filter(t => t.continent === continent.id);
-      if (!territories.length) return null;
+// Continent coastline points in engine coords (0-800 x, 0-520 y)
+const CONTINENT_SHAPES: Record<string, [number, number][]> = {
+  'north-america': [
+    [20,55],[40,45],[70,40],[110,35],[150,30],[200,25],[250,20],[300,22],[320,30],
+    [310,45],[295,60],[280,55],[260,70],[250,90],[240,100],[230,110],[240,130],
+    [250,145],[240,155],[230,160],[220,170],[210,180],[200,200],[195,210],
+    [185,220],[175,240],[165,255],[155,270],[140,280],[125,285],[115,270],
+    [105,255],[90,240],[80,225],[75,210],[80,195],[85,180],[80,165],
+    [70,150],[60,135],[50,120],[40,105],[30,95],[20,80],
+  ],
+  'south-america': [
+    [145,290],[155,285],[170,290],[185,295],[200,295],[215,300],[235,310],
+    [250,325],[260,340],[265,355],[260,370],[255,385],[250,400],[240,420],
+    [230,440],[220,455],[210,470],[200,480],[190,485],[180,478],[175,465],
+    [170,450],[163,435],[158,420],[155,400],[150,380],[148,360],[145,340],
+    [142,320],[143,305],
+  ],
+  'europe': [
+    [325,55],[340,50],[355,55],[365,65],[375,60],[390,55],[410,52],[430,58],
+    [445,65],[460,72],[475,80],[490,90],[500,105],[505,120],[500,138],
+    [495,155],[490,170],[480,185],[465,195],[450,210],[435,218],[420,225],
+    [405,228],[390,230],[375,225],[362,218],[350,210],[340,195],[335,180],
+    [333,165],[332,150],[330,135],[328,120],[326,105],[325,85],
+  ],
+  'africa': [
+    [345,250],[360,245],[375,250],[390,260],[410,265],[430,260],[450,258],
+    [465,265],[480,275],[490,285],[500,300],[510,320],[520,340],[525,360],
+    [525,380],[520,400],[515,415],[510,430],[505,445],[495,458],[480,465],
+    [465,470],[450,472],[435,470],[420,465],[410,455],[405,440],[400,420],
+    [395,400],[385,385],[375,370],[365,355],[358,340],[352,320],[348,300],
+    [345,280],[344,265],
+  ],
+  'asia': [
+    [510,60],[530,50],[555,42],[580,38],[610,35],[640,30],[670,28],[700,35],
+    [725,45],[740,58],[748,75],[750,95],[748,115],[745,135],[742,155],
+    [740,175],[735,195],[728,210],[720,225],[708,240],[695,255],[680,268],
+    [665,278],[650,290],[640,302],[635,315],[630,328],[625,340],[615,348],
+    [600,345],[585,335],[570,320],[558,305],[550,290],[542,275],[535,260],
+    [530,245],[528,230],[525,215],[522,200],[518,185],[515,168],[512,150],
+    [510,130],[508,110],[508,90],[509,75],
+  ],
+  'australia': [
+    [625,355],[640,350],[660,355],[680,348],[700,345],[718,352],[735,358],
+    [748,370],[755,388],[758,408],[755,428],[750,445],[745,458],[738,468],
+    [725,475],[710,478],[695,478],[680,475],[665,470],[652,465],[640,455],
+    [632,440],[628,425],[625,408],[623,390],[623,372],
+  ],
+};
 
-      const pts = territories.map(t => toBoard(t.position.x, t.position.y));
-      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
-      const cz = pts.reduce((s, p) => s + p[2], 0) / pts.length;
+function ContinentLandmasses() {
+  const meshes = useMemo(() => {
+    return Object.entries(CONTINENT_SHAPES).map(([continentId, points]) => {
+      const shape = new THREE.Shape();
+      const first = toBoard(points[0][0], points[0][1]);
+      shape.moveTo(first[0], first[2]);
+      for (let i = 1; i < points.length; i++) {
+        const p = toBoard(points[i][0], points[i][1]);
+        shape.lineTo(p[0], p[2]);
+      }
+      shape.closePath();
 
-      const sorted = [...pts].sort((a, b) => {
-        const angA = Math.atan2(a[2] - cz, a[0] - cx);
-        const angB = Math.atan2(b[2] - cz, b[0] - cx);
-        return angA - angB;
-      });
-
-      const padding = 1.8;
-      const expanded = sorted.map(p => {
-        const dx = p[0] - cx;
-        const dz = p[2] - cz;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        const scale = (dist + padding) / Math.max(dist, 0.1);
-        return new THREE.Vector3(cx + dx * scale, 0.06, cz + dz * scale);
-      });
-
-      if (expanded.length > 0) expanded.push(expanded[0].clone());
-
-      const curve = new THREE.CatmullRomCurve3(expanded, true, 'centripetal', 0.5);
-      const curvePoints = curve.getPoints(expanded.length * 12);
-
-      const color = CONTINENT_BG_COLORS[continent.id] || '#888888';
-      return { id: continent.id, points: curvePoints, color };
-    }).filter(Boolean);
-  }, [gameState.territories]);
-
-  // 2) Dashed lines between all adjacent territories (like original Risk board)
-  const territoryBorders = useMemo(() => {
-    const result: { id: string; from: THREE.Vector3; to: THREE.Vector3; isCrossContinent: boolean }[] = [];
-    const seen = new Set<string>();
-    gameState.territories.forEach(t => {
-      t.neighbors.forEach(nid => {
-        const key = [t.id, nid].sort().join('--');
-        if (seen.has(key)) return;
-        seen.add(key);
-        const n = gameState.territories.find(x => x.id === nid);
-        if (!n) return;
-        if (Math.abs(t.position.x - n.position.x) > 400) return; // Skip wrap-around
-
-        const from = toBoard(t.position.x, t.position.y);
-        const to = toBoard(n.position.x, n.position.y);
-        const isCrossContinent = t.continent !== n.continent;
-
-        // For cross-continent borders, use perpendicular separator
-        if (isCrossContinent) {
-          const mx = (from[0] + to[0]) / 2;
-          const mz = (from[2] + to[2]) / 2;
-          const dx = to[0] - from[0];
-          const dz = to[2] - from[2];
-          const len = Math.sqrt(dx * dx + dz * dz);
-          const perpX = -dz / len;
-          const perpZ = dx / len;
-          const halfW = 1.2;
-          result.push({
-            id: key,
-            from: new THREE.Vector3(mx - perpX * halfW, 0.065, mz - perpZ * halfW),
-            to: new THREE.Vector3(mx + perpX * halfW, 0.065, mz + perpZ * halfW),
-            isCrossContinent: true,
-          });
-        } else {
-          // For same-continent borders, use direct line with gap in middle
-          const mx = (from[0] + to[0]) / 2;
-          const mz = (from[2] + to[2]) / 2;
-          const gapSize = 0.3;
-          const dx = to[0] - from[0];
-          const dz = to[2] - from[2];
-          const len = Math.sqrt(dx * dx + dz * dz);
-          const dirX = dx / len;
-          const dirZ = dz / len;
-
-          // First segment (from territory to gap)
-          result.push({
-            id: key + '-1',
-            from: new THREE.Vector3(from[0], 0.055, from[2]),
-            to: new THREE.Vector3(mx - dirX * gapSize, 0.055, mz - dirZ * gapSize),
-            isCrossContinent: false,
-          });
-
-          // Second segment (gap to neighbor)
-          result.push({
-            id: key + '-2',
-            from: new THREE.Vector3(mx + dirX * gapSize, 0.055, mz + dirZ * gapSize),
-            to: new THREE.Vector3(to[0], 0.055, to[2]),
-            isCrossContinent: false,
-          });
-        }
-      });
+      const color = CONTINENT_BG_COLORS[continentId] || '#888888';
+      return { id: continentId, shape, color };
     });
-    return result;
-  }, [gameState.territories]);
+  }, []);
 
   return (
     <group>
-      {/* Continent outlines */}
+      {meshes.map(({ id, shape, color }) => (
+        <mesh key={id} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]} receiveShadow>
+          <shapeGeometry args={[shape]} />
+          <meshStandardMaterial
+            color={color}
+            roughness={0.75}
+            metalness={0.05}
+            transparent
+            opacity={0.45}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ============================================================================
+// CONTINENT BORDER OUTLINES — dashed lines around landmasses
+// ============================================================================
+
+function ContinentBorders() {
+  const outlines = useMemo(() => {
+    return Object.entries(CONTINENT_SHAPES).map(([continentId, points]) => {
+      const pts3d = points.map(([x, y]) => {
+        const p = toBoard(x, y);
+        return new THREE.Vector3(p[0], 0.06, p[2]);
+      });
+      // Close the loop
+      if (pts3d.length > 0) pts3d.push(pts3d[0].clone());
+
+      const color = CONTINENT_BG_COLORS[continentId] || '#888888';
+      return { id: continentId, points: pts3d, color };
+    });
+  }, []);
+
+  return (
+    <group>
       {outlines.map(border => {
-        if (!border) return null;
         const geo = new THREE.BufferGeometry().setFromPoints(border.points);
         const mat = new THREE.LineDashedMaterial({
           color: border.color,
           transparent: true,
-          opacity: 0.7,
-          dashSize: 0.6,
-          gapSize: 0.3,
+          opacity: 0.8,
+          dashSize: 0.5,
+          gapSize: 0.25,
           linewidth: 1,
         });
         const line = new THREE.Line(geo, mat);
         line.computeLineDistances();
         return <primitive key={border.id} object={line} />;
-      })}
-
-      {/* Territory border dashes */}
-      {territoryBorders.map(sep => {
-        const geo = new THREE.BufferGeometry().setFromPoints([sep.from, sep.to]);
-        const mat = new THREE.LineDashedMaterial({
-          color: sep.isCrossContinent ? '#FFFFFF' : '#666666',
-          transparent: true,
-          opacity: sep.isCrossContinent ? 0.35 : 0.2,
-          dashSize: sep.isCrossContinent ? 0.25 : 0.15,
-          gapSize: sep.isCrossContinent ? 0.15 : 0.1,
-          linewidth: 1,
-        });
-        const line = new THREE.Line(geo, mat);
-        line.computeLineDistances();
-        return <primitive key={sep.id} object={line} />;
       })}
     </group>
   );
@@ -435,16 +420,30 @@ function BoardContent({ gameState, selectedTerritory, onTerritoryClick }: BoardC
 
   return (
     <>
-      {/* Warm directional lighting */}
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[10, 18, 8]} intensity={0.85} castShadow shadow-mapSize={[2048, 2048]} color="#FFF8E8" />
-      <directionalLight position={[-8, 12, -5]} intensity={0.2} color="#B0C4DE" />
+      {/* Cinematic Lighting — warm war-room feel */}
+      <ambientLight intensity={0.55} color="#FFF5E0" />
+      <directionalLight
+        position={[10, 24, 8]}
+        intensity={1.8}
+        color="#FFF0D0"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={50}
+        shadow-camera-left={-28}
+        shadow-camera-right={28}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
+        shadow-bias={-0.0002}
+      />
+      <directionalLight position={[-8, 16, -6]} intensity={0.5} color="#C0D8FF" />
+      <pointLight position={[0, 12, 0]} intensity={0.3} color="#FFE0B0" distance={30} />
 
       {/* Camera — top-down angled view like looking at a board game */}
-      <PerspectiveCamera makeDefault position={[0, 28, 12]} fov={45} />
-      <OrbitControls enablePan enableZoom enableRotate minDistance={10} maxDistance={50} maxPolarAngle={Math.PI / 2.3} minPolarAngle={0.1} />
+      <PerspectiveCamera makeDefault position={[0, 30, 10]} fov={42} />
+      <OrbitControls enablePan enableZoom enableRotate minDistance={10} maxDistance={50} maxPolarAngle={Math.PI / 2.15} minPolarAngle={0.1} />
 
-      <color attach="background" args={['#12151C']} />
+      <color attach="background" args={['#0A0C14']} />
 
       {/* === WAR ROOM TABLE === */}
       <mesh position={[0, -0.15, 0]} receiveShadow>
@@ -475,11 +474,14 @@ function BoardContent({ gameState, selectedTerritory, onTerritoryClick }: BoardC
         </mesh>
       ))}
 
+      {/* Filled continent landmass shapes */}
+      <ContinentLandmasses />
+
       {/* Connection lines between territories */}
       <ConnectionLines gameState={gameState} />
 
-      {/* Continent dashed border lines */}
-      <ContinentBorders gameState={gameState} />
+      {/* Continent dashed border outlines */}
+      <ContinentBorders />
 
       {/* Continent labels */}
       <ContinentLabels gameState={gameState} />

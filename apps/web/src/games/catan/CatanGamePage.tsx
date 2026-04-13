@@ -3,29 +3,26 @@
  * Complete game interface with hexagonal board
  */
 
-import { useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import CatanBoard3D from './CatanBoard3D';
 const CatanTradePanel = lazy(() => import('./CatanTradePanel'));
 const CatanCarouselHUD = lazy(() => import('./CatanCarouselHUD'));
-import { Resource3DIcon } from './CatanResourceFlow';
-import CatanResourceFeedback, { type ResourceFeedbackEntry } from './CatanResourceFeedback';
+import CatanResourceFeedback from './CatanResourceFeedback';
+import { BuildModeHUD } from './CatanBuildMode';
+import { usePlacementPreview } from './CatanPlacementHighlight';
 
-type CameraMode = 'tactical' | 'table' | 'inspect' | 'cinematic';
 import CatanPresence, { type PresencePeerInfo } from './CatanPresence';
 import { type Presence3DPlayer } from './CatanPresence3D';
 import CatanDice from './CatanDice';
 import {
   computeUIProjection,
   computeVPBreakdown,
-  computeResourceSummary,
-  computeProduction,
-  type ProductionEntry,
 } from './CatanProjections';
 import CatanLobby, { type LobbyConfig } from './CatanLobby';
-import { useCatanAI, type AIDifficulty } from './useCatanAI';
+import { useCatanAI } from './useCatanAI';
 import {
   TutorialOverlay,
   RulesReference,
@@ -42,7 +39,7 @@ import { useCatanSounds } from './useCatanSounds';
 import { useCatanPersistence } from './useCatanPersistence';
 import {
   Home, Building2, Route, ScrollText,
-  Users, ArrowRight, Package,
+  Users, ArrowRight,
   Crown, Sword, Map,
   ArrowLeft, RotateCcw, Save, FolderOpen, Undo2, Bot, Handshake,
   BookOpen, MessageSquare, BarChart3, HelpCircle, ListOrdered,
@@ -54,31 +51,10 @@ import {
   type Player,
   type ResourceType,
   type DevelopmentCard,
-  createInitialGameState,
   getCurrentPlayer,
-  performRoll,
-  buyDevelopmentCard,
-  moveRobber,
-  stealResource,
-  endTurn,
-  advanceSetup,
-  buildSettlement,
-  buildCity,
-  buildRoad,
-  bankTrade,
-  canBuildSettlement,
-  canBuildCity,
-  canBuildRoad,
-  canBuyDevelopmentCard,
-  playKnight,
-  playYearOfPlenty,
-  playMonopoly,
-  playRoadBuilding,
-  buildFreeRoad,
-  hasResources,
-  discardResources,
-  BUILDING_COSTS,
+  hasResources, canBuyDevelopmentCard, BUILDING_COSTS,
 } from './CatanEngine';
+import { useCatanStore, type CameraMode } from './store/useCatanStore';
 
 // ============================================================================
 // DISCARD PANEL — lets the robbed player select resources to discard
@@ -608,11 +584,7 @@ function ActionPanel({ gameState, onAction, rolling, rollKey = 0, onOpenTrade }:
   );
 }
 
-interface ResourcePanelProps {
-  player: Player;
-  gameState: GameState;
-}
-
+/*
 function _ResourcePanel({ player, gameState }: ResourcePanelProps) {
   const summary = computeResourceSummary(gameState, player.id);
   const rateColor = (r: number) =>
@@ -665,6 +637,7 @@ function _ResourcePanel({ player, gameState }: ResourcePanelProps) {
     </div>
   );
 }
+*/
 
 // ============================================================================
 // MAIN GAME PAGE
@@ -673,54 +646,30 @@ function _ResourcePanel({ player, gameState }: ResourcePanelProps) {
 export default function CatanGamePage() {
   const mp = useMultiplayerGame<GameState>();
 
-  // ── Lobby ──────────────────────────────────────────────────────────────────
-  const [showLobby, setShowLobby] = useState(!mp.isMultiplayer);
-  const [difficulty, setDifficulty] = useState<AIDifficulty>('standard');
-  const [aiPlayerIds, setAiPlayerIds] = useState<string[]>([]);
-  
-  const [gameState, setGameState] = useState<GameState>(() => {
-    if (mp.isMultiplayer && mp.playerNames.length > 0) {
-      return createInitialGameState(mp.playerNames);
-    }
-    return createInitialGameState(['Red', 'Blue', 'Orange', 'White']);
-  });
-  const [rolling, setRolling] = useState(false);
-  const [buildMode, setBuildMode] = useState<'settlement' | 'city' | 'road' | null>(null);
-  const [cameraMode, setCameraMode] = useState<CameraMode>('tactical');
-  const [rollKey, setRollKey] = useState(0);
-  const [productionLog, setProductionLog] = useState<ProductionEntry[]>([]);
-  const [showTradePanel, setShowTradePanel] = useState(false);
-  const [showIntroAnimation, setShowIntroAnimation] = useState(true);
-  const [introPhase, setIntroPhase] = useState<'shuffle' | 'letters' | 'numbers'>('shuffle');
+  // ── Unified Zustand Store ─────────────────────────────────────────────────
+  const store = useCatanStore();
+  // Alias for minimal JSX diff — all existing `gameState.xxx` references work unchanged
+  const gameState = store.game;
+  const {
+    rolling, rollKey, buildMode, cameraMode,
+    showLobby, showTradePanel, showIntroAnimation, introPhase,
+    showTutorial, showRules, showChat, showDiceHistory,
+    showSaveLoad, showReplay, showLeaderboard, showTxLog, showSettings,
+    soundMuted, layoutMode,
+    aiPlayerIds, difficulty,
+    diceHistory, productionLog, resourceFeedback, vpCelebration,
+    presencePlayers,
+  } = store;
 
-  // ── New HUD feature toggles ────────────────────────────────────────────
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [showRules, setShowRules] = useState(false);
-  const [showChat, setShowChat] = useState(false);
-  const [showDiceHistory, setShowDiceHistory] = useState(false);
+  // ── Local-only state (not game logic) ───────────────────────────────────
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [diceHistory, setDiceHistory] = useState<number[]>([]);
   const [resourceGains, setResourceGains] = useState<ResourceGain[]>([]);
-  const [showSaveLoad, setShowSaveLoad] = useState(false);
-  const [showReplay, setShowReplay] = useState(false);
   const [replayIndex, setReplayIndex] = useState(0);
   const [replayPlaying, setReplayPlaying] = useState(false);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [txLog, setTxLog] = useState<{ t: number; msg: string }[]>([]);
-  const [showTxLog, setShowTxLog] = useState(false);
-  const [vpCelebration, setVpCelebration] = useState<{ player: string; vp: number } | null>(null);
   const prevVPs = useRef<Record<string, number>>({});
-  const [layoutMode, setLayoutMode] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [soundMuted, setSoundMuted] = useState(false);
-  // Bank trade moved to carousel HUD (no vertex popup needed)
-  const [resourceFeedback, setResourceFeedback] = useState<ResourceFeedbackEntry[]>([]);
-
-  // ── 3D Presence bridge — WebRTC streams ↔ 3D video panels ──────────────
-  const [presencePlayers, setPresencePlayers] = useState<Presence3DPlayer[]>([]);
 
   const handlePeersChange = useCallback((localStream: MediaStream | null, peerInfos: PresencePeerInfo[]) => {
-    // Build Presence3DPlayer[] from real WebRTC streams
     const presence3D: Presence3DPlayer[] = gameState.players.map(p => {
       const peerInfo = peerInfos.find(pi => pi.id === p.id);
       const isLocal = p.id === (mp.playerId ?? 'local');
@@ -735,23 +684,19 @@ export default function CatanGamePage() {
         victoryPoints: p.victoryPoints,
       };
     });
-    setPresencePlayers(presence3D);
+    useCatanStore.getState().setPresencePlayers(presence3D);
   }, [gameState.players, gameState.currentPlayerIndex, mp.playerId]);
 
   // Solo mode — still show 3D panels (no streams, avatar placeholder) for all players
   useEffect(() => {
-    if (mp.isMultiplayer) return; // multiplayer handled by onPeersChange
+    if (mp.isMultiplayer) return;
     const soloPresence: Presence3DPlayer[] = gameState.players.map((p, i) => ({
-      id: p.id,
-      name: p.name,
-      color: p.color,
-      stream: null,
-      audioEnabled: false,
-      videoEnabled: false,
+      id: p.id, name: p.name, color: p.color,
+      stream: null, audioEnabled: false, videoEnabled: false,
       isActive: i === gameState.currentPlayerIndex,
       victoryPoints: p.victoryPoints,
     }));
-    setPresencePlayers(soloPresence);
+    useCatanStore.getState().setPresencePlayers(soloPresence);
   }, [mp.isMultiplayer, gameState.players, gameState.currentPlayerIndex]);
 
   // ── VP celebration detection ───────────────────────────────────────────────
@@ -759,9 +704,9 @@ export default function CatanGamePage() {
     for (const p of gameState.players) {
       const prev = prevVPs.current[p.id] ?? p.victoryPoints;
       if (p.victoryPoints > prev) {
-        setVpCelebration({ player: p.name, vp: p.victoryPoints });
+        useCatanStore.setState({ vpCelebration: { player: p.name, vp: p.victoryPoints } });
         setTxLog(l => [...l, { t: Date.now(), msg: `🏆 ${p.name} reached ${p.victoryPoints} VP` }]);
-        setTimeout(() => setVpCelebration(null), 2500);
+        setTimeout(() => useCatanStore.setState({ vpCelebration: null }), 2500);
       }
       prevVPs.current[p.id] = p.victoryPoints;
     }
@@ -785,8 +730,17 @@ export default function CatanGamePage() {
   const humanIds = gameState.players
     .filter(p => !aiPlayerIds.includes(p.id))
     .map(p => p.id);
+  // Adapter: useCatanAI expects React-style updater fn, store.setGame takes plain state
+  const setGameStateCompat = useCallback((s: GameState | ((prev: GameState) => GameState)) => {
+    if (typeof s === 'function') {
+      const next = s(useCatanStore.getState().game);
+      useCatanStore.getState().setGame(next);
+    } else {
+      useCatanStore.getState().setGame(s);
+    }
+  }, []);
   const { triggerAITurn } = useCatanAI({
-    setGameState,
+    setGameState: setGameStateCompat,
     difficulty,
     humanPlayerIds: humanIds,
   });
@@ -804,54 +758,19 @@ export default function CatanGamePage() {
   // ── Intro Animation Sequence ────────────────────────────────────────────────
   useEffect(() => {
     if (!showIntroAnimation) return;
-
-    // Phase 1: Shuffle hexes (2 seconds)
-    const shuffleTimeout = setTimeout(() => {
-      setIntroPhase('letters');
-    }, 2000);
-
-    // Phase 2: Show alphabetical letters (2 seconds)
-    const lettersTimeout = setTimeout(() => {
-      setIntroPhase('numbers');
-    }, 4000);
-
-    // Phase 3: Reveal actual numbers (1 second)
-    const numbersTimeout = setTimeout(() => {
-      setShowIntroAnimation(false);
-    }, 5000);
-
-    return () => {
-      clearTimeout(shuffleTimeout);
-      clearTimeout(lettersTimeout);
-      clearTimeout(numbersTimeout);
-    };
+    const shuffleTimeout = setTimeout(() => useCatanStore.setState({ introPhase: 'letters' }), 2000);
+    const lettersTimeout = setTimeout(() => useCatanStore.setState({ introPhase: 'numbers' }), 4000);
+    const numbersTimeout = setTimeout(() => useCatanStore.setState({ showIntroAnimation: false, introPhase: null }), 5000);
+    return () => { clearTimeout(shuffleTimeout); clearTimeout(lettersTimeout); clearTimeout(numbersTimeout); };
   }, [showIntroAnimation]);
 
-  // ── Lobby start handler ───────────────────────────────────────────────────
+  // ── Lobby start handler (delegates to store.startGame) ─────────────────────
   const handleLobbyStart = useCallback((config: LobbyConfig) => {
-    const playerNames = config.players.map(p => p.name);
-    const initialState = createInitialGameState(
-      mp.isMultiplayer && mp.playerNames.length > 0 ? mp.playerNames : playerNames,
-      config.boardSize,
+    useCatanStore.getState().startGame(
+      config,
+      mp.isMultiplayer && mp.playerNames.length > 0 ? mp.playerNames : undefined,
     );
-    // Override player colors from lobby config
-    const stateWithColors = {
-      ...initialState,
-      players: initialState.players.map((p, i) => ({
-        ...p,
-        color: config.players[i]?.color ?? p.color,
-      })),
-    };
-    const aiIds = config.players
-      .filter(p => p.isAI)
-      .map((_, i) => stateWithColors.players[i]?.id)
-      .filter((id): id is string => !!id);
-    setAiPlayerIds(aiIds);
-    setDifficulty(config.difficulty);
-    setGameState(stateWithColors);
-    pushHistory(stateWithColors);
-    setBuildMode(null);
-    setShowLobby(false);
+    pushHistory(useCatanStore.getState().game);
   }, [mp.isMultiplayer, mp.playerNames, pushHistory]);
 
   // ── Presence signaling bridge ────────────────────────────────────────────
@@ -873,64 +792,39 @@ export default function CatanGamePage() {
   // Multiplayer: receive state from host (non-host players)
   useEffect(() => {
     if (mp.isMultiplayer && !mp.isHost && mp.remoteState) {
-      setGameState(mp.remoteState);
+      useCatanStore.getState().setGame(mp.remoteState);
     }
   }, [mp.isMultiplayer, mp.isHost, mp.remoteState]);
 
+  // ── Action dispatcher (routes string actions to store methods) ──────────
   const handleAction = useCallback((action: string, data?: unknown) => {
     switch (action) {
       case 'roll':
-        setRolling(true);
-        setRollKey(k => k + 1);
-        setProductionLog([]);
-        
-        // Play distinct, physically accurate satisfying dice roll sound
-        const rollAudio = new Audio('https://actions.google.com/sounds/v1/foley/rolling_dice.ogg');
-        rollAudio.volume = 0.7;
-        rollAudio.play().catch(() => {});
-
+        useCatanStore.getState().rollDice();
+        // Push resource gain notifications after store updates (next tick)
         setTimeout(() => {
-          setGameState(prev => {
-            const next = performRoll(prev);
-            pushHistory(next);
-            if (next.diceRoll) {
-              const total = next.diceRoll[0] + next.diceRoll[1];
-              setDiceHistory(h => [...h, total]);
-              if (total !== 7) {
-                const prod = computeProduction(prev, total);
-                setProductionLog(prod);
-                // Push resource gain notifications
-                for (const entry of prod) {
-                  setResourceGains(g => [...g, {
-                    id: `rg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                    resource: entry.resource,
-                    amount: entry.amount,
-                    timestamp: Date.now(),
-                  }]);
-                  // Also push to floating resource feedback toasts
-                  const prodPlayer = next.players.find(p => p.name === entry.playerName);
-                  setResourceFeedback(f => [...f, {
-                    id: `rf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                    playerName: entry.playerName,
-                    playerColor: prodPlayer?.color ?? '#fff',
-                    resource: entry.resource,
-                    amount: entry.amount,
-                    timestamp: Date.now(),
-                  }]);
-                }
-              }
+          const s = useCatanStore.getState();
+          if (s.productionLog.length > 0) {
+            pushHistory(s.game);
+            for (const entry of s.productionLog) {
+              setResourceGains(g => [...g, {
+                id: `rg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                resource: entry.resource,
+                amount: entry.amount,
+                timestamp: Date.now(),
+              }]);
             }
-            return next;
-          });
-          setRolling(false);
-        }, 800);
+          } else {
+            pushHistory(s.game);
+          }
+        }, 850);
         break;
 
       case 'undo': {
         const prev = undo();
         if (prev) {
-          setGameState(prev);
-          setBuildMode(null);
+          useCatanStore.getState().setGame(prev);
+          useCatanStore.getState().setBuildMode(null);
         }
         break;
       }
@@ -942,217 +836,143 @@ export default function CatanGamePage() {
       case 'load': {
         const saved = loadGame();
         if (saved) {
-          setGameState(saved.state);
-          setBuildMode(null);
+          useCatanStore.getState().loadState(saved.state);
         }
         break;
       }
 
       case 'end-turn':
-        setGameState(prev => endTurn(prev));
-        setBuildMode(null);
+        useCatanStore.getState().doEndTurn();
         break;
 
       case 'steal':
-        if (typeof data === 'string') {
-          setGameState(prev => stealResource(prev, data));
-        }
+        if (typeof data === 'string') useCatanStore.getState().doStealResource(data);
         break;
 
       case 'buy-dev-card':
-        setGameState(prev => buyDevelopmentCard(prev, getCurrentPlayer(prev).id));
+        useCatanStore.getState().buyDevCard();
         break;
 
       case 'build-settlement':
-        setBuildMode(prev => prev === 'settlement' ? null : 'settlement');
+        useCatanStore.getState().setBuildMode(buildMode === 'settlement' ? null : 'settlement');
         break;
 
       case 'build-city':
-        setBuildMode(prev => prev === 'city' ? null : 'city');
+        useCatanStore.getState().setBuildMode(buildMode === 'city' ? null : 'city');
         break;
 
       case 'build-road':
-        setBuildMode(prev => prev === 'road' ? null : 'road');
+        useCatanStore.getState().setBuildMode(buildMode === 'road' ? null : 'road');
         break;
 
       case 'bank-trade':
         if (data && typeof data === 'object') {
           const { give, receive } = data as { give: ResourceType; receive: ResourceType };
-          setGameState(prev => bankTrade(prev, getCurrentPlayer(prev).id, give, receive));
+          useCatanStore.getState().doBankTrade(give, receive);
         }
         break;
 
       case 'play-knight':
-        setGameState(prev => playKnight(prev, getCurrentPlayer(prev).id));
+        useCatanStore.getState().doPlayKnight();
         break;
 
       case 'play-year-of-plenty':
         if (data && typeof data === 'object') {
           const { r1, r2 } = data as { r1: ResourceType; r2: ResourceType };
-          setGameState(prev => playYearOfPlenty(prev, getCurrentPlayer(prev).id, r1, r2));
+          useCatanStore.getState().doPlayYearOfPlenty(r1, r2);
         }
         break;
 
       case 'play-monopoly':
-        if (typeof data === 'string') {
-          setGameState(prev => playMonopoly(prev, getCurrentPlayer(prev).id, data as ResourceType));
-        }
+        if (typeof data === 'string') useCatanStore.getState().doPlayMonopoly(data as ResourceType);
         break;
 
       case 'play-road-building':
-        setGameState(prev => playRoadBuilding(prev, getCurrentPlayer(prev).id));
+        useCatanStore.getState().doPlayRoadBuilding();
         break;
 
       case 'discard':
         if (data && typeof data === 'object') {
-          setGameState(prev => {
-            const discIdx = prev.discardingPlayerIndex ?? 0;
-            const playerId = prev.players[discIdx]?.id;
-            if (!playerId) return prev;
-            return discardResources(prev, playerId, data as Record<ResourceType, number>);
-          });
+          useCatanStore.getState().doDiscard(data as Record<ResourceType, number>);
         }
         break;
 
       case 'new-game':
-        setShowLobby(true);
-        setBuildMode(null);
+        useCatanStore.getState().newGame();
         break;
 
       default:
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState, undo, saveGame, loadGame, pushHistory]);
+  }, [gameState, buildMode, undo, saveGame, loadGame, pushHistory]);
 
+  // ── Build mode (store-driven, no CatanCommandDispatcher) ─────────────────
+  const buildModeState = { active: buildMode, playerId: getCurrentPlayer(gameState).id };
+  const { clearPreview } = usePlacementPreview();
+
+  const handleEnterBuildMode = useCallback((buildingType: 'settlement' | 'city' | 'road') => {
+    useCatanStore.getState().setBuildMode(buildingType);
+  }, []);
+
+  const handleExitBuildMode = useCallback(() => {
+    clearPreview();
+    useCatanStore.getState().setBuildMode(null);
+  }, [clearPreview]);
+
+  // ── Board click handlers (delegates to store actions) ─────────────────────
   const handleHexClick = useCallback((hexId: number) => {
-    if (gameState.phase === 'robber-move') {
-      setGameState(prev => moveRobber(prev, hexId));
-    }
+    if (gameState.phase === 'robber-move') useCatanStore.getState().doMoveRobber(hexId);
   }, [gameState.phase]);
 
   const handleVertexClick = useCallback((vertexId: string) => {
     const phase = gameState.phase;
-    const playerId = getCurrentPlayer(gameState).id;
-    const player = getCurrentPlayer(gameState);
-
-    if (phase === 'setup-settlement') {
-      setGameState(prev => {
-        const next = buildSettlement(prev, playerId, vertexId);
-        if (next === prev) return prev;
-
-        // Show resource feedback for 2nd settlement (setup round 2)
-        if (prev.setupRound === 2) {
-          const vertex = next.vertices.find(v => v.id === vertexId);
-          if (vertex) {
-            const adjacentHexes = next.hexTiles.filter(h => vertex.hexIds.includes(h.id));
-            for (const hex of adjacentHexes) {
-              const terrain = hex.terrain;
-              const resMap: Record<string, ResourceType> = {
-                forest: 'wood', hills: 'brick', pasture: 'sheep', fields: 'wheat', mountains: 'ore',
-              };
-              const res = resMap[terrain];
-              if (res) {
-                setResourceFeedback(f => [...f, {
-                  id: `rf-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  playerName: player.name,
-                  playerColor: player.color,
-                  resource: res,
-                  amount: 1,
-                  timestamp: Date.now(),
-                }]);
-              }
-            }
-          }
-        }
-
-        return advanceSetup(next);
-      });
-      return;
-    }
-
-    // During main phase build mode — build immediately
-    if (phase === 'main' && buildMode === 'settlement') {
-      if (canBuildSettlement(gameState, playerId, vertexId)) {
-        setGameState(prev => buildSettlement(prev, playerId, vertexId));
-        setBuildMode(null);
-      }
-      return;
-    }
-
-    if (phase === 'main' && buildMode === 'city') {
-      if (canBuildCity(gameState, playerId, vertexId)) {
-        setGameState(prev => buildCity(prev, playerId, vertexId));
-        setBuildMode(null);
-      }
-      return;
-    }
-  }, [gameState, buildMode]);
+    if (phase === 'setup-settlement') { useCatanStore.getState().placeSetupSettlement(vertexId); return; }
+    if (phase === 'main' && buildMode === 'settlement') { useCatanStore.getState().buildAtVertex(vertexId); handleExitBuildMode(); return; }
+    if (phase === 'main' && buildMode === 'city') { useCatanStore.getState().buildAtVertex(vertexId); handleExitBuildMode(); return; }
+  }, [gameState.phase, buildMode, handleExitBuildMode]);
 
   const handleEdgeClick = useCallback((edgeId: string) => {
     const phase = gameState.phase;
-    const playerId = getCurrentPlayer(gameState).id;
+    if (phase === 'setup-road') { useCatanStore.getState().placeSetupRoad(edgeId); return; }
+    if (buildMode === 'road' && phase === 'main') { useCatanStore.getState().buildRoadAtEdge(edgeId); handleExitBuildMode(); return; }
+    if (gameState.freeRoadsRemaining > 0) { useCatanStore.getState().placeFreeRoad(edgeId); return; }
+  }, [gameState.phase, gameState.freeRoadsRemaining, buildMode, handleExitBuildMode]);
 
-    if (phase === 'setup-road') {
-      setGameState(prev => {
-        const next = buildRoad(prev, playerId, edgeId);
-        if (next !== prev) return advanceSetup(next);
-        return prev;
-      });
-      return;
-    }
-
-    if (buildMode === 'road' && phase === 'main') {
-      if (canBuildRoad(gameState, playerId, edgeId)) {
-        setGameState(prev => buildRoad(prev, playerId, edgeId));
-        setBuildMode(null);
-      }
-      return;
-    }
-
-    // Free road placement from Road Building dev card
-    if (gameState.freeRoadsRemaining > 0) {
-      setGameState(prev => buildFreeRoad(prev, playerId, edgeId));
-      return;
-    }
-  }, [gameState, buildMode]);
-
-  // Show vertex/edge targets when in build mode or setup phase
+  // ── Derived state ────────────────────────────────────────────────────────
   const showVertexTargets = buildMode === 'settlement' || buildMode === 'city' || gameState.phase === 'setup-settlement';
   const showEdgeTargets = buildMode === 'road' || gameState.phase === 'setup-road' || gameState.freeRoadsRemaining > 0;
 
   const currentPlayer = getCurrentPlayer(gameState);
 
-  // Compute ONLY the valid placement positions — filter out illegal spots
-  const validVertexIds = useMemo(() => {
-    if (!showVertexTargets) return [];
-    const pid = currentPlayer.id;
-    const isSetup = gameState.phase === 'setup-settlement';
+  const { vertexIds: validVertexIds, edgeIds: validEdgeIds } = useCatanStore(s => {
+    const { game, buildMode: bm } = s;
+    const pid = getCurrentPlayer(game).id;
+    const isSetupS = game.phase === 'setup-settlement';
+    const isSetupR = game.phase === 'setup-road';
+    const showV = bm === 'settlement' || bm === 'city' || isSetupS;
+    const showE = bm === 'road' || isSetupR || game.freeRoadsRemaining > 0;
 
-    if (buildMode === 'city') {
-      // City: only the current player's existing settlements
-      return gameState.vertices
-        .filter(v => canBuildCity(gameState, pid, v.id))
-        .map(v => v.id);
-    }
-
-    // Settlement (setup or main phase)
-    return gameState.vertices
-      .filter(v => canBuildSettlement(gameState, pid, v.id, isSetup))
-      .map(v => v.id);
-  }, [showVertexTargets, gameState, buildMode, currentPlayer.id]);
-
-  const validEdgeIds = useMemo(() => {
-    if (!showEdgeTargets) return [];
-    const pid = currentPlayer.id;
-    const isSetup = gameState.phase === 'setup-road';
-
-    return gameState.edges
-      .filter(e => canBuildRoad(gameState, pid, e.id, isSetup))
-      .map(e => e.id);
-  }, [showEdgeTargets, gameState, currentPlayer.id]);
+    return {
+      vertexIds: showV
+        ? (bm === 'city'
+            ? game.vertices.filter(v => v.building?.type === 'settlement' && v.building?.playerId === pid).map(v => v.id)
+            : game.vertices.filter(v => !v.building && !game.vertices.some(adj =>
+                adj.id !== v.id && adj.building &&
+                game.edges.some(e => e.vertexIds.includes(v.id) && e.vertexIds.includes(adj.id))
+              ) && (isSetupS || game.edges.some(e => e.vertexIds.includes(v.id) && (e.road?.playerId === pid || game.vertices.some(av => e.vertexIds.includes(av.id) && av.building?.playerId === pid))))
+            ).map(v => v.id))
+        : [] as string[],
+      edgeIds: showE
+        ? game.edges.filter(e => !e.road && (isSetupR || e.vertexIds.some(vid => {
+            const vertex = game.vertices.find(v => v.id === vid);
+            return vertex?.building?.playerId === pid || game.edges.some(ae => ae.road?.playerId === pid && ae.vertexIds.includes(vid));
+          }))).map(e => e.id)
+        : [] as string[],
+    };
+  });
   const uiProjection = computeUIProjection(gameState, currentPlayer.id);
-  const _diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
+  // const _diceVisible = gameState.phase === 'roll' || !!gameState.diceRoll;
   const phaseHelp = (() => {
     switch (gameState.phase) {
       case 'setup-settlement':
@@ -1178,7 +998,22 @@ export default function CatanGamePage() {
 
   // ── Lobby gate ────────────────────────────────────────────────────────────
   if (showLobby) {
-    return <CatanLobby onStart={handleLobbyStart} />;
+    return (
+      <CatanLobby
+        onStart={handleLobbyStart}
+        hasSavedGame={hasSave()}
+        onLoadGame={() => {
+          const loaded = loadGame();
+          if (loaded?.state) {
+            store.loadState(loaded.state);
+            useCatanStore.setState({ showLobby: false });
+          }
+        }}
+        onDeleteSave={() => {
+          try { localStorage.removeItem('tableforge_catan_save'); } catch {}
+        }}
+      />
+    );
   }
 
   return (
@@ -1225,11 +1060,12 @@ export default function CatanGamePage() {
         <CatanBoard3D
           gameState={gameState}
           presencePlayers={presencePlayers}
-          onHexClick={handleHexClick}
+          onHexClick={showVertexTargets ? handleHexClick : undefined}
           onVertexClick={showVertexTargets ? handleVertexClick : undefined}
           onEdgeClick={showEdgeTargets ? handleEdgeClick : undefined}
           validVertexIds={validVertexIds}
           validEdgeIds={validEdgeIds}
+          buildMode={buildModeState}
         />
       </div>
 
@@ -1288,7 +1124,7 @@ export default function CatanGamePage() {
             {(['tactical', 'table', 'inspect', 'cinematic'] as CameraMode[]).map(mode => (
               <button
                 key={mode}
-                onClick={() => setCameraMode(mode)}
+                onClick={() => store.setCameraMode(mode)}
                 className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-xs font-semibold transition-all capitalize ${
                   cameraMode === mode
                     ? 'bg-orange-500 text-white shadow-md shadow-orange-500/40'
@@ -1331,56 +1167,56 @@ export default function CatanGamePage() {
             <div className="w-px h-4 bg-white/15 mx-0.5 hidden sm:block" />
             {/* HUD toggles — hidden on mobile to save space */}
             <button
-              onClick={() => setShowTutorial(v => !v)}
+              onClick={() => store.togglePanel('showTutorial')}
               title="Tutorial"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showTutorial ? 'text-amber-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <HelpCircle className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowRules(v => !v)}
+              onClick={() => store.togglePanel('showRules')}
               title="Rules Reference"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showRules ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <BookOpen className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowChat(v => !v)}
+              onClick={() => store.togglePanel('showChat')}
               title="Chat"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showChat ? 'text-green-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <MessageSquare className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowDiceHistory(v => !v)}
+              onClick={() => store.togglePanel('showDiceHistory')}
               title="Dice History"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showDiceHistory ? 'text-orange-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <BarChart3 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowSaveLoad(v => !v)}
+              onClick={() => store.togglePanel('showSaveLoad')}
               title="Save / Load"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showSaveLoad ? 'text-purple-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Save className="w-4 h-4" />
             </button>
             <button
-              onClick={() => { setShowReplay(v => !v); setReplayIndex(gameState.log.length - 1); }}
+              onClick={() => { store.togglePanel('showReplay'); setReplayIndex(gameState.log.length - 1); }}
               title="Replay Log"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showReplay ? 'text-cyan-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <ListOrdered className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowLeaderboard(v => !v)}
+              onClick={() => store.togglePanel('showLeaderboard')}
               title="Leaderboard"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showLeaderboard ? 'text-yellow-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Trophy className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowTxLog(v => !v)}
+              onClick={() => store.togglePanel('showTxLog')}
               title="Transaction Log"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${showTxLog ? 'text-pink-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
@@ -1388,21 +1224,21 @@ export default function CatanGamePage() {
             </button>
             <div className="w-px h-4 bg-white/15 mx-0.5 hidden sm:block" />
             <button
-              onClick={() => setLayoutMode(v => !v)}
+              onClick={() => useCatanStore.setState(s => ({ layoutMode: !s.layoutMode }))}
               title="Layout Mode — drag panels in 3D space"
               className={`hidden sm:flex p-1.5 rounded-lg transition-colors items-center justify-center ${layoutMode ? 'text-teal-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               <Move className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setSoundMuted(v => !v)}
+              onClick={() => store.toggleSoundMuted()}
               title={soundMuted ? 'Unmute sounds' : 'Mute sounds'}
               className={`p-2 sm:p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center ${soundMuted ? 'text-red-400 bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
               {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
             </button>
             <button
-              onClick={() => setShowSettings(v => !v)}
+              onClick={() => store.togglePanel('showSettings')}
               title="Settings"
               className={`p-2 sm:p-1.5 rounded-lg transition-colors min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center ${showSettings ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
             >
@@ -1418,37 +1254,45 @@ export default function CatanGamePage() {
         </div>
 
         {/* Build Mode / Free Roads floating banner — large, prominent, with instructions */}
-        {(buildMode || gameState.freeRoadsRemaining > 0) && (
+        {(buildModeState.active || gameState.freeRoadsRemaining > 0) && (
           <div className="flex justify-center mt-2 pointer-events-auto">
             <div className={`px-5 sm:px-8 py-2.5 sm:py-3 rounded-2xl text-sm sm:text-base font-bold shadow-xl animate-pulse ${
               gameState.freeRoadsRemaining > 0
                 ? 'bg-green-600/90 text-white border-2 border-green-300/50 shadow-green-500/30'
-                : buildMode === 'road'
+                : buildModeState.active === 'road'
                   ? 'bg-amber-600/90 text-white border-2 border-amber-300/50 shadow-amber-500/30'
-                  : buildMode === 'city'
+                  : buildModeState.active === 'city'
                     ? 'bg-blue-600/90 text-white border-2 border-blue-300/50 shadow-blue-500/30'
                     : 'bg-emerald-600/90 text-white border-2 border-emerald-300/50 shadow-emerald-500/30'
             } backdrop-blur-lg`}>
               <div className="flex items-center gap-3">
                 <span className="text-lg sm:text-xl">
-                  {gameState.freeRoadsRemaining > 0 ? '🛤️' : buildMode === 'road' ? '🛤️' : buildMode === 'city' ? '🏰' : '🏠'}
+                  {gameState.freeRoadsRemaining > 0 ? 'Free Roads' : buildModeState.active === 'road' ? 'Road' : buildModeState.active === 'city' ? 'City' : 'Settlement'} Mode
                 </span>
                 <div>
                   <div>
                     {gameState.freeRoadsRemaining > 0
-                      ? `Road Building: Place ${gameState.freeRoadsRemaining} free road${gameState.freeRoadsRemaining > 1 ? 's' : ''}`
-                      : `Place a ${buildMode}`}
+                      ? `Place ${gameState.freeRoadsRemaining} free road${gameState.freeRoadsRemaining > 1 ? 's' : ''}`
+                      : buildModeState.active === 'road'
+                        ? 'Click an edge to place'
+                        : buildModeState.active === 'city'
+                          ? 'Upgrade a settlement'
+                          : 'Click a vertex to place'
+                    }
                   </div>
-                  <div className="text-[10px] sm:text-xs font-normal opacity-80 mt-0.5">
-                    {buildMode === 'road' || gameState.freeRoadsRemaining > 0
+                  <div className="text-xs sm:text-sm opacity-80">
+                    {gameState.freeRoadsRemaining > 0
                       ? '👆 Click a glowing orange bar between two corners'
-                      : buildMode === 'city'
-                        ? '👆 Click one of your existing settlements to upgrade'
-                        : '👆 Click a glowing gold diamond on any hex corner'}
+                      : buildModeState.active === 'road'
+                        ? '👆 Click an edge to place'
+                        : buildModeState.active === 'city'
+                          ? '👆 Click one of your existing settlements to upgrade'
+                          : '👆 Click a glowing gold diamond on any hex corner'
+                    }
                   </div>
                 </div>
-                {buildMode && (
-                  <button onClick={() => setBuildMode(null)} className="ml-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors">✕ Cancel</button>
+                {buildModeState.active && (
+                  <button onClick={handleExitBuildMode} className="ml-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold transition-colors">Cancel</button>
                 )}
               </div>
             </div>
@@ -1497,7 +1341,7 @@ export default function CatanGamePage() {
             onAction={handleAction}
             rolling={rolling}
             rollKey={rollKey}
-            onOpenTrade={() => setShowTradePanel(true)}
+            onOpenTrade={() => useCatanStore.setState({ showTradePanel: true })}
           />
         </div>
 
@@ -1508,7 +1352,7 @@ export default function CatanGamePage() {
               gameState={gameState}
               playerId={currentPlayer.id}
               onBankTrade={(give, receive) => handleAction('bank-trade', { give, receive })}
-              onOpenFullTrade={() => setShowTradePanel(true)}
+              onOpenFullTrade={() => useCatanStore.setState({ showTradePanel: true })}
               onBuild={(type) => handleAction(`build-${type}`)}
               onBuyDevCard={() => handleAction('buy-dev-card')}
             />
@@ -1516,10 +1360,18 @@ export default function CatanGamePage() {
         </div>
       </div>
 
+      {/* === BUILD MODE HUD === */}
+      <BuildModeHUD
+        buildMode={buildModeState}
+        onEnterBuildMode={handleEnterBuildMode}
+        onExitBuildMode={handleExitBuildMode}
+        disabled={gameState.phase !== 'main' || gameState.freeRoadsRemaining > 0}
+      />
+
       {/* === RESOURCE FEEDBACK TOASTS === */}
       <CatanResourceFeedback
         entries={resourceFeedback}
-        onDismiss={(id) => setResourceFeedback(f => f.filter(e => e.id !== id))}
+        onDismiss={(id) => useCatanStore.setState(s => ({ resourceFeedback: s.resourceFeedback.filter(e => e.id !== id) }))}
       />
 
       {/* === FLOATING DICE OVERLAY — prominent center-screen roll result === */}
@@ -1573,8 +1425,8 @@ export default function CatanGamePage() {
             <CatanTradePanel
               gameState={gameState}
               currentPlayerId={currentPlayer.id}
-              onStateChange={(s) => { setGameState(s); setShowTradePanel(false); }}
-              onClose={() => setShowTradePanel(false)}
+              onStateChange={(s) => { store.setGame(s); useCatanStore.setState({ showTradePanel: false }); }}
+              onClose={() => useCatanStore.setState({ showTradePanel: false })}
             />
           </Suspense>
         )}
@@ -1595,51 +1447,59 @@ export default function CatanGamePage() {
       )}
 
       {/* === HUD OVERLAYS (Tutorial, Rules, Chat, Dice History) === */}
-      <TutorialOverlay isActive={showTutorial} onClose={() => setShowTutorial(false)} />
-      <RulesReference isOpen={showRules} onClose={() => setShowRules(false)} />
-      <GameChat
-        isOpen={showChat}
-        onClose={() => setShowChat(false)}
-        messages={chatMessages}
-        onSend={(text) => {
-          setChatMessages(prev => [...prev, {
-            id: `msg-${Date.now()}`,
-            playerId: currentPlayer.id,
-            playerName: currentPlayer.name,
-            playerColor: currentPlayer.color,
+      <>
+        <TutorialOverlay isActive={showTutorial} onClose={() => useCatanStore.setState({ showTutorial: false })} />
+        <RulesReference isOpen={showRules} onClose={() => useCatanStore.setState({ showRules: false })} />
+        <GameChat
+          isOpen={showChat}
+          onClose={() => useCatanStore.setState({ showChat: false })}
+          messages={chatMessages}
+          onSend={(text) => setChatMessages(prev => [...prev, {
+            id: `chat-${Date.now()}`,
+            playerId: getCurrentPlayer(gameState).id,
+            playerName: getCurrentPlayer(gameState).name,
+            playerColor: getCurrentPlayer(gameState).color,
             text,
-            timestamp: Date.now(),
-          }]);
-        }}
-        currentPlayerId={currentPlayer.id}
-      />
-      <DiceHistoryChart isOpen={showDiceHistory} onClose={() => setShowDiceHistory(false)} history={diceHistory} />
-      <SaveLoadPanel
-        isOpen={showSaveLoad}
-        onClose={() => setShowSaveLoad(false)}
-        onSave={() => saveGame(gameState)}
-        onLoad={() => {
-          const saved = loadGame();
-          if (saved) { setGameState(saved.state); setBuildMode(null); }
-        }}
-        hasSave={hasSave()}
-      />
-      <ReplayControls
-        isActive={showReplay}
-        log={gameState.log}
-        currentIndex={replayIndex}
-        onStep={setReplayIndex}
-        onPlay={() => setReplayPlaying(true)}
-        onPause={() => setReplayPlaying(false)}
-        onClose={() => { setShowReplay(false); setReplayPlaying(false); }}
-        isPlaying={replayPlaying}
-      />
-      <ResourceGainNotifications gains={resourceGains} />
-      <ZoomControls
-        onZoomIn={() => {/* OrbitControls zoom handled by scroll — placeholder for programmatic zoom */}}
-        onZoomOut={() => {}}
-        onZoomFit={() => {}}
-      />
+            timestamp: Date.now()
+          }])}
+          currentPlayerId={getCurrentPlayer(gameState).id}
+        />
+        <DiceHistoryChart
+          isOpen={showDiceHistory}
+          onClose={() => useCatanStore.setState({ showDiceHistory: false })}
+          history={diceHistory}
+        />
+        <ResourceGainNotifications
+          gains={resourceGains}
+        />
+        <ZoomControls
+          onZoomIn={() => {/* TODO: Implement zoom in */}}
+          onZoomOut={() => {/* TODO: Implement zoom out */}}
+          onZoomFit={() => {/* TODO: Implement zoom reset */}}
+        />
+        <SaveLoadPanel
+          isOpen={showSaveLoad}
+          onClose={() => useCatanStore.setState({ showSaveLoad: false })}
+          onSave={() => saveGame(gameState)}
+          onLoad={() => {
+            const loaded = loadGame();
+            if (loaded?.state) {
+              store.loadState(loaded.state);
+            }
+          }}
+          hasSave={hasSave()}
+        />
+        <ReplayControls
+          isActive={showReplay}
+          log={gameState.log}
+          currentIndex={replayIndex}
+          onStep={setReplayIndex}
+          onPlay={() => setReplayPlaying(true)}
+          onPause={() => setReplayPlaying(false)}
+          onClose={() => { useCatanStore.setState({ showReplay: false }); setReplayPlaying(false); }}
+          isPlaying={replayPlaying}
+        />
+      </>
 
       {/* === VP CELEBRATION OVERLAY — sparkle animation on VP gain === */}
       {vpCelebration && (
@@ -1688,7 +1548,7 @@ export default function CatanGamePage() {
                 <Trophy className="w-4 h-4 text-yellow-400" />
                 Leaderboard
               </h3>
-              <button onClick={() => setShowLeaderboard(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+              <button onClick={() => useCatanStore.setState({ showLeaderboard: false })} className="text-slate-400 hover:text-white text-xs">✕</button>
             </div>
             <div className="space-y-1.5">
               {[...gameState.players]
@@ -1724,7 +1584,7 @@ export default function CatanGamePage() {
                 <ArrowUpDown className="w-4 h-4 text-pink-400" />
                 Transaction Log
               </h3>
-              <button onClick={() => setShowTxLog(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+              <button onClick={() => useCatanStore.setState({ showTxLog: false })} className="text-slate-400 hover:text-white text-xs">✕</button>
             </div>
             {txLog.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-4">No transactions yet.</p>
@@ -1751,7 +1611,7 @@ export default function CatanGamePage() {
             <Move className="w-4 h-4 text-teal-300" />
             <span className="text-teal-200 text-xs font-semibold">Layout Mode Active — drag presence panels in 3D space</span>
             <button
-              onClick={() => setLayoutMode(false)}
+              onClick={() => useCatanStore.setState({ layoutMode: false })}
               className="text-teal-400 hover:text-white text-xs underline ml-2"
             >
               Exit
@@ -1769,14 +1629,14 @@ export default function CatanGamePage() {
                 <Settings className="w-4 h-4 text-slate-400" />
                 Game Settings
               </h3>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
+              <button onClick={() => useCatanStore.setState({ showSettings: false })} className="text-slate-400 hover:text-white text-xs">✕</button>
             </div>
             <div className="space-y-3">
               {/* Sound toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-white/70">Sound Effects</span>
                 <button
-                  onClick={() => setSoundMuted(v => !v)}
+                  onClick={() => store.toggleSoundMuted()}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                     soundMuted ? 'bg-red-600/30 text-red-300 border border-red-500/30' : 'bg-green-600/30 text-green-300 border border-green-500/30'
                   }`}
@@ -1788,7 +1648,7 @@ export default function CatanGamePage() {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-white/70">Layout Mode</span>
                 <button
-                  onClick={() => setLayoutMode(v => !v)}
+                  onClick={() => useCatanStore.setState(s => ({ layoutMode: !s.layoutMode }))}
                   className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                     layoutMode ? 'bg-teal-600/30 text-teal-300 border border-teal-500/30' : 'bg-slate-600/30 text-slate-300 border border-slate-500/30'
                   }`}
@@ -1801,7 +1661,7 @@ export default function CatanGamePage() {
                 <span className="text-xs text-white/70">Camera</span>
                 <select
                   value={cameraMode}
-                  onChange={e => setCameraMode(e.target.value as CameraMode)}
+                  onChange={e => store.setCameraMode(e.target.value as CameraMode)}
                   className="bg-slate-800 text-white text-xs rounded-lg px-2 py-1 border border-white/15"
                 >
                   {(['tactical', 'table', 'inspect', 'cinematic'] as CameraMode[]).map(m => (

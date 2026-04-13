@@ -11,6 +11,7 @@ import {
   Crown, Move, SkipForward, ArrowLeft, RotateCcw
 } from 'lucide-react';
 import RiskBoard3D from './RiskBoard3D';
+import { useRiskAI, type AIPlayerConfig } from './useRiskAI';
 import {
   type GameState,
   type Player,
@@ -27,6 +28,12 @@ import {
   skipFortify,
   CONTINENTS,
 } from './RiskEngine';
+
+const AI_CONFIGS: AIPlayerConfig[] = [
+  { playerId: 'player-1', difficulty: 'Medium', strategy: 'balanced' },
+  { playerId: 'player-2', difficulty: 'Hard', strategy: 'aggressive' },
+  { playerId: 'player-3', difficulty: 'Easy', strategy: 'defensive' },
+];
 
 // ============================================================================
 // WORLD MAP COMPONENT
@@ -590,6 +597,11 @@ export default function RiskGamePage() {
 
   const currentPlayer = getCurrentPlayer(gameState);
 
+  // AI players — automatically take turns for non-human players
+  const { isAITurn } = useRiskAI(gameState, AI_CONFIGS, (newState) => {
+    setGameState(newState);
+  });
+
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-black">
       {/* === FULL-SCREEN 3D MAP BACKGROUND === */}
@@ -620,6 +632,9 @@ export default function RiskGamePage() {
           <div className="pointer-events-auto bg-black/60 backdrop-blur-md rounded-xl px-4 py-2 border border-white/10 flex items-center gap-2">
             <div className="w-4 h-4 rounded-full border-2 border-white/50" style={{ backgroundColor: currentPlayer.color }} />
             <span className="text-white font-semibold text-sm">{currentPlayer.name}'s Turn</span>
+            {isAITurn && (
+              <span className="text-xs text-amber-400 font-bold animate-pulse ml-1">🤖 AI Thinking...</span>
+            )}
           </div>
         </div>
       </div>

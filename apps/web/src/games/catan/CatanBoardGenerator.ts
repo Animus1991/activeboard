@@ -237,13 +237,23 @@ export function generateBoard(size: BoardSize = 'standard'): GeneratedBoard {
   const numbers = solveNumberAssignment(terrains, config.numberPool, adjacency);
 
   // Build HexTile[]
-  const hexTiles: HexTile[] = positions.map((pos, i) => ({
-    id: i,
-    terrain: terrains[i],
-    number: numbers[i],
-    hasRobber: terrains[i] === 'desert',
-    position: pos,
-  }));
+  const letterTokens = 'ABCDEFGHIJKLMNOPQR'.split('');
+  let letterIndex = 0;
+
+  const hexTiles: HexTile[] = positions.map((pos, i) => {
+    const terrain = terrains[i];
+    const number = numbers[i];
+    const letterToken = number !== null ? letterTokens[letterIndex++] : null;
+
+    return {
+      id: i,
+      terrain: terrain,
+      number: number,
+      letterToken: letterToken,
+      hasRobber: terrain === 'desert',
+      position: pos,
+    };
+  });
 
   // Only one desert should have the robber initially
   const desertTiles = hexTiles.filter(h => h.terrain === 'desert');

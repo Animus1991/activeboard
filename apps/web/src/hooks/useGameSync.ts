@@ -408,14 +408,20 @@ export function useGameSync({
     setPlayerId(null);
   }, [sendMessage]);
 
+  // Keep latest connect/disconnect in refs to avoid effect dependency churn
+  const connectRef = useRef(connect);
+  connectRef.current = connect;
+  const disconnectRef = useRef(disconnect);
+  disconnectRef.current = disconnect;
+
   // Connect on mount (only if enabled)
   useEffect(() => {
     if (shouldConnect) {
-      connect();
+      connectRef.current();
     }
-    return () => disconnect();
+    return () => disconnectRef.current();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldConnect, connect, disconnect]);
+  }, [shouldConnect]);
 
   // Actions
   const movePiece = useCallback((pieceId: string, position: { x: number; y: number; z: number }) => {

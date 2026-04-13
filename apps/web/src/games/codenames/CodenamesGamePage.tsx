@@ -3,13 +3,13 @@
  * Complete game interface with team-based word guessing
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useMultiplayerGame } from '@/hooks/useMultiplayerGame';
 import { 
   Users, Eye, EyeOff, MessageSquare, 
   SkipForward, Trophy, Skull, User,
-  Hash, ArrowLeft
+  Hash, ArrowLeft, Timer, RotateCcw
 } from 'lucide-react';
 import {
   type GameState,
@@ -39,23 +39,23 @@ function Card({ card, isSpymaster, canGuess, onGuess }: CardProps) {
   const getCardColor = () => {
     if (card.isRevealed) {
       switch (card.type) {
-        case 'red': return 'bg-red-600 text-white';
-        case 'blue': return 'bg-blue-600 text-white';
-        case 'neutral': return 'bg-amber-200 text-amber-900';
-        case 'assassin': return 'bg-slate-900 text-white';
+        case 'red': return 'bg-gradient-to-br from-red-500 to-red-700 text-white ring-2 ring-red-400/50';
+        case 'blue': return 'bg-gradient-to-br from-blue-500 to-blue-700 text-white ring-2 ring-blue-400/50';
+        case 'neutral': return 'bg-gradient-to-br from-amber-100 to-amber-300 text-amber-900 ring-1 ring-amber-400/40';
+        case 'assassin': return 'bg-gradient-to-br from-slate-800 to-slate-950 text-white ring-2 ring-red-600/60';
       }
     }
     
     if (isSpymaster) {
       switch (card.type) {
-        case 'red': return 'bg-red-100 border-red-400 text-red-800';
-        case 'blue': return 'bg-blue-100 border-blue-400 text-blue-800';
-        case 'neutral': return 'bg-amber-50 border-amber-300 text-amber-700';
-        case 'assassin': return 'bg-slate-200 border-slate-500 text-slate-800';
+        case 'red': return 'bg-red-50/80 border-red-400 text-red-800 shadow-red-200/30 shadow-md';
+        case 'blue': return 'bg-blue-50/80 border-blue-400 text-blue-800 shadow-blue-200/30 shadow-md';
+        case 'neutral': return 'bg-amber-50/80 border-amber-300 text-amber-700 shadow-amber-200/20 shadow-md';
+        case 'assassin': return 'bg-slate-100/80 border-slate-500 text-slate-800 shadow-slate-400/30 shadow-md';
       }
     }
     
-    return 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200';
+    return 'bg-gradient-to-b from-white to-slate-50 border-slate-200 text-slate-800 hover:from-slate-50 hover:to-slate-100 hover:border-slate-300';
   };
 
   const getIcon = () => {
@@ -74,17 +74,17 @@ function Card({ card, isSpymaster, canGuess, onGuess }: CardProps) {
       disabled={!canGuess || card.isRevealed}
       className={`
         relative rounded-xl border-2 font-bold text-sm uppercase tracking-wider
-        transition-all duration-300 min-h-[80px] flex flex-col items-center justify-center gap-1
+        transition-all duration-300 ease-out min-h-[88px] flex flex-col items-center justify-center gap-1
         ${getCardColor()}
-        ${canGuess && !card.isRevealed ? 'cursor-pointer transform hover:scale-[1.06] hover:-translate-y-1 shadow-lg hover:shadow-xl' : ''}
-        ${card.isRevealed ? 'shadow-inner' : 'shadow-md'}
-        ${!card.isRevealed && !isSpymaster ? 'bg-gradient-to-b from-white to-slate-50 border-slate-200' : ''}
+        ${canGuess && !card.isRevealed ? 'cursor-pointer transform hover:scale-[1.07] hover:-translate-y-1.5 shadow-lg hover:shadow-2xl hover:shadow-purple-500/10' : ''}
+        ${card.isRevealed ? 'shadow-inner scale-[0.97]' : 'shadow-md'}
       `}
       style={{
-        textShadow: card.isRevealed ? '0 1px 2px rgba(0,0,0,0.3)' : 'none',
+        textShadow: card.isRevealed ? '0 2px 4px rgba(0,0,0,0.4)' : 'none',
+        perspective: '600px',
       }}
     >
-      <span className="text-center leading-tight px-2 text-[13px]">{card.word}</span>
+      <span className={`text-center leading-tight px-2 text-[13px] ${card.isRevealed ? 'line-through opacity-80 decoration-2' : ''}`}>{card.word}</span>
       {card.isRevealed && (
         <div className="absolute top-1.5 right-1.5 opacity-70">
           {getIcon()}
@@ -308,6 +308,51 @@ function GameLog({ gameState }: GameLogProps) {
 // MAIN GAME PAGE
 // ============================================================================
 
+// ============================================================================
+// TURN TIMER HOOK
+// ============================================================================
+
+const TURN_DURATION = 120; // 2 minutes per turn
+
+function useTurnTimer(gamePhase: string, currentTeam: string) {
+  const [secondsLeft, setSecondsLeft] = useState(TURN_DURATION);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevTeamRef = useRef(currentTeam);
+  const prevPhaseRef = useRef(gamePhase);
+
+  // Reset timer when team or phase changes
+  useEffect(() => {
+    if (currentTeam !== prevTeamRef.current || gamePhase !== prevPhaseRef.current) {
+      setSecondsLeft(TURN_DURATION);
+      prevTeamRef.current = currentTeam;
+      prevPhaseRef.current = gamePhase;
+    }
+  }, [currentTeam, gamePhase]);
+
+  // Countdown
+  useEffect(() => {
+    if (gamePhase === 'game-over') {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [gamePhase]);
+
+  const reset = useCallback(() => setSecondsLeft(TURN_DURATION), []);
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  const display = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const isUrgent = secondsLeft <= 15;
+  const isWarning = secondsLeft <= 30 && secondsLeft > 15;
+
+  return { secondsLeft, display, isUrgent, isWarning, reset };
+}
+
 export default function CodenamesGamePage() {
   const mp = useMultiplayerGame<GameState>();
   
@@ -318,6 +363,7 @@ export default function CodenamesGamePage() {
     return createInitialGameState(['Alice', 'Bob', 'Charlie', 'Diana']);
   });
   const [isSpymasterView, setIsSpymasterView] = useState(false);
+  const timer = useTurnTimer(gameState.phase, gameState.currentTeam);
 
   // Multiplayer: sync state to remote players when host changes it
   useEffect(() => {
@@ -370,6 +416,26 @@ export default function CodenamesGamePage() {
           </div>
 
           <div className="flex items-center gap-2 pointer-events-auto">
+            {/* Turn Timer */}
+            {gameState.phase !== 'game-over' && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg backdrop-blur-md border font-mono text-sm font-bold transition-all ${
+                timer.isUrgent
+                  ? 'bg-red-600/80 border-red-400/50 text-white animate-pulse'
+                  : timer.isWarning
+                    ? 'bg-amber-600/60 border-amber-400/40 text-amber-100'
+                    : 'bg-black/50 border-white/10 text-slate-200'
+              }`}>
+                <Timer className={`w-4 h-4 ${timer.isUrgent ? 'text-red-200' : 'text-slate-400'}`} />
+                <span>{timer.display}</span>
+                <button
+                  onClick={timer.reset}
+                  className="ml-1 p-0.5 rounded hover:bg-white/10 transition-colors"
+                  title="Reset timer"
+                >
+                  <RotateCcw className="w-3 h-3 text-slate-400" />
+                </button>
+              </div>
+            )}
             <button
               onClick={() => setIsSpymasterView(!isSpymasterView)}
               className={`px-3 py-1.5 rounded-lg flex items-center gap-2 text-sm font-semibold transition-all backdrop-blur-md border border-white/10 ${
@@ -458,6 +524,30 @@ export default function CodenamesGamePage() {
           <GameLog gameState={gameState} />
         </div>
       </div>
+
+      {/* === BOTTOM BAR — Team Online Counts === */}
+      {gameState.phase !== 'game-over' && (
+        <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
+          <div className="flex items-center justify-center gap-4 px-4 py-2">
+            <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-red-500/20">
+              <Users className="w-4 h-4 text-red-400" />
+              <span className="text-xs text-slate-400">Red Team:</span>
+              <span className="text-sm text-white font-bold">
+                {gameState.players.filter(p => p.team === 'red').length} Players
+              </span>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Online" />
+            </div>
+            <div className="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-blue-500/20">
+              <Users className="w-4 h-4 text-blue-400" />
+              <span className="text-xs text-slate-400">Blue Team:</span>
+              <span className="text-sm text-white font-bold">
+                {gameState.players.filter(p => p.team === 'blue').length} Players
+              </span>
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Online" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

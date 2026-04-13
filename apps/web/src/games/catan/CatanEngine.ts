@@ -20,6 +20,7 @@ export interface HexTile {
   id: number;
   terrain: TerrainType;
   number: number | null;  // null for desert
+  letterToken: string | null; // For intro animation
   hasRobber: boolean;
   position: { q: number; r: number };  // Axial coordinates
 }
@@ -212,13 +213,23 @@ function generateHexTiles(): HexTile[] {
     [shuffledNumbers[nullIndex], shuffledNumbers[desertIndex]];
   }
 
-  return HEX_POSITIONS.map((pos, index) => ({
-    id: index,
-    terrain: shuffledTerrain[index],
-    number: shuffledNumbers[index],
-    hasRobber: shuffledTerrain[index] === 'desert',
-    position: pos,
-  }));
+  const letterTokens = 'ABCDEFGHIJKLMNOPQR'.split('');
+  let letterIndex = 0;
+
+  return HEX_POSITIONS.map((pos, index) => {
+    const terrain = shuffledTerrain[index];
+    const number = shuffledNumbers[index];
+    const letterToken = number !== null ? letterTokens[letterIndex++] : null;
+
+    return {
+      id: index,
+      terrain: terrain,
+      number: number,
+      letterToken: letterToken,
+      hasRobber: terrain === 'desert',
+      position: pos,
+    };
+  });
 }
 
 function getVertexId(hexIds: number[]): string {
